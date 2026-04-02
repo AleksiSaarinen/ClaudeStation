@@ -41,6 +41,9 @@ class Session: ObservableObject, Identifiable {
     var process: Process?
     var ptyPrimary: FileHandle?
 
+    /// Callback for feeding raw PTY data to the terminal view
+    var terminalFeed: ((Data) -> Void)?
+
     var displayName: String {
         if !name.isEmpty { return name }
         let dir = (workingDirectory as NSString).lastPathComponent

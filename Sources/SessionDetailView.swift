@@ -26,7 +26,7 @@ struct SessionDetailView: View {
                 VStack(spacing: 0) {
                     switch activeTab {
                     case .terminal:
-                        TerminalOutputView(session: session)
+                        SwiftTermView(session: session)
                     case .minigame:
                         MinigameView(bridge: minigameBridge)
                     }
@@ -165,29 +165,6 @@ struct SessionHeaderBar: View {
 }
 
 // MARK: - Terminal Output
-
-struct TerminalOutputView: View {
-    @ObservedObject var session: Session
-    
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Text(session.outputBuffer.isEmpty ? "Session not started. Press Launch to begin." : session.outputBuffer)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .textSelection(.enabled)
-                    .id("output-bottom")
-            }
-            .background(Color(nsColor: .textBackgroundColor))
-            .onChange(of: session.outputBuffer) { _, _ in
-                withAnimation {
-                    proxy.scrollTo("output-bottom", anchor: .bottom)
-                }
-            }
-        }
-    }
-}
 
 // MARK: - Input Bar
 
