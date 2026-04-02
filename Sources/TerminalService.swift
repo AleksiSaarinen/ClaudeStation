@@ -12,7 +12,8 @@ class TerminalService {
         // Create a pseudo-terminal so Claude Code sees a real TTY
         var primary: Int32 = 0
         var secondary: Int32 = 0
-        var winSize = winsize(ws_row: 40, ws_col: 120, ws_xpixel: 0, ws_ypixel: 0)
+        // Initial size — SwiftTerm will update this via sizeChanged when it knows its actual size
+        var winSize = winsize(ws_row: 24, ws_col: 80, ws_xpixel: 0, ws_ypixel: 0)
 
         guard openpty(&primary, &secondary, nil, nil, &winSize) == 0 else {
             DispatchQueue.main.async {
@@ -44,8 +45,9 @@ class TerminalService {
         // Set up environment
         var env = ProcessInfo.processInfo.environment
         env["TERM"] = "xterm-256color"
-        env["COLUMNS"] = "120"
-        env["ROWS"] = "40"
+        // Don't set COLUMNS/ROWS — SwiftTerm reports its actual size via TIOCSWINSZ
+        env.removeValue(forKey: "COLUMNS")
+        env.removeValue(forKey: "ROWS")
         process.environment = env
 
         session.process = process

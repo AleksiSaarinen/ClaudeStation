@@ -1,0 +1,89 @@
+{
+  "": {
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/primary.swiftdeps"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/AppSettings.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/AppSettings.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/AppSettings.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/AppSettings~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/AppSettings.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/AppSettings.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/ClaudeStationApp.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ClaudeStationApp.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ClaudeStationApp.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ClaudeStationApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ClaudeStationApp.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ClaudeStationApp.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/ContentView.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ContentView.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ContentView.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ContentView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ContentView.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/ContentView.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/MessageQueuePanel.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MessageQueuePanel.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MessageQueuePanel.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MessageQueuePanel~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MessageQueuePanel.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MessageQueuePanel.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/MinigameBridge.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameBridge.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameBridge.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameBridge~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameBridge.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameBridge.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/MinigameView.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameView.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameView.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameView.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/MinigameView.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/Session.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/Session.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/Session.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/Session~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/Session.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/Session.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/SessionDetailView.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionDetailView.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionDetailView.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionDetailView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionDetailView.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionDetailView.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/SessionManager.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionManager.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionManager.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionManager.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SessionManager.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/SettingsView.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SettingsView.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SettingsView.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SettingsView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SettingsView.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SettingsView.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/SwiftTermView.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SwiftTermView.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SwiftTermView.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SwiftTermView~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SwiftTermView.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/SwiftTermView.dia"
+  },
+  "/Users/hypehype/Documents/ClaudeStation/Sources/TerminalService.swift": {
+    "dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/TerminalService.d",
+    "object": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/TerminalService.swift.o",
+    "swiftmodule": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/TerminalService~partial.swiftmodule",
+    "swift-dependencies": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/TerminalService.swiftdeps",
+    "diagnostics": "/Users/hypehype/Documents/ClaudeStation/.build/arm64-apple-macosx/debug/ClaudeStation.build/TerminalService.dia"
+  }
+}
