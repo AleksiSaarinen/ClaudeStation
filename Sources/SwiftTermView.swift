@@ -40,6 +40,30 @@ class TerminalViewCache {
         views.removeValue(forKey: sessionId)
         coordinators.removeValue(forKey: sessionId)
     }
+
+    /// Get current buffer line count by iterating getLine()
+    func bufferLineCount(for sessionId: UUID) -> Int {
+        guard let tv = views[sessionId] else { return 0 }
+        let terminal = tv.getTerminal()
+        var count = 0
+        while terminal.getLine(row: count) != nil { count += 1 }
+        return count
+    }
+
+    /// Read clean rendered text from the terminal buffer starting at a given line.
+    /// Uses BufferLine.translateToString() which returns properly rendered characters
+    /// (no ANSI codes, cursor artifacts, or animation overlaps).
+    func getRenderedText(for sessionId: UUID, fromLine: Int) -> String {
+        guard let tv = views[sessionId] else { return "" }
+        let terminal = tv.getTerminal()
+        var lines: [String] = []
+        var row = fromLine
+        while let bufLine = terminal.getLine(row: row) {
+            lines.append(bufLine.translateToString(trimRight: true))
+            row += 1
+        }
+        return lines.joined(separator: "\n")
+    }
 }
 
 /// NSViewRepresentable wrapping SwiftTerm's TerminalView for proper terminal emulation

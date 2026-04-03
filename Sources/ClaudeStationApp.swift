@@ -5,7 +5,8 @@ struct ClaudeStationApp: App {
     @StateObject private var sessionManager = SessionManager()
 
     var body: some Scene {
-        WindowGroup {
+        // Single-instance Window — prevents URL scheme calls from spawning duplicates
+        Window("ClaudeStation", id: "main") {
             ContentView()
                 .environmentObject(sessionManager)
                 .frame(minWidth: 900, minHeight: 600)
@@ -14,7 +15,8 @@ struct ClaudeStationApp: App {
                 }
         }
         .commands {
-            CommandGroup(after: .newItem) {
+            // Replace default "New Window" (Cmd+N) with our "New Session"
+            CommandGroup(replacing: .newItem) {
                 Button("New Session") {
                     sessionManager.createSession()
                 }

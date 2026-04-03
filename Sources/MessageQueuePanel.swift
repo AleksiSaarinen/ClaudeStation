@@ -1,143 +1,148 @@
 import SwiftUI
 
-struct MessageQueuePanel: View {
+/// Inline queue strip shown above the input bar when messages are queued.
+/// Compact pill-style items with send/remove actions.
+struct InlineQueueStrip: View {
     @ObservedObject var session: Session
     @EnvironmentObject var sessionManager: SessionManager
-    
+    @State private var expanded: Bool = false
+
     var body: some View {
         VStack(spacing: 0) {
-            // Queue header
-            HStack {
-                Label("Message Queue", systemImage: "tray.full")
-                    .font(.headline)
-                
-                Spacer()
-                
-                if !session.messageQueue.isEmpty {
-                    Text("\(session.messageQueue.count)")
-                        .font(.caption.bold())
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.orange.opacity(0.2))
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                // Header row
+                HStack(spacing: 6) {
+                    Image(systemName: "tray.full")
+                        .font(.caption2)
                         .foregroundStyle(.orange)
-                        .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.bar)
-            
-            Divider()
-            
-            if session.messageQueue.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "tray")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-                    Text("Queue is empty")
-                        .foregroundStyle(.secondary)
-                    Text("Messages you queue will appear here\nand send automatically when Claude is ready.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxHeight: .infinity)
-                .padding()
-            } else {
-                List {
-                    ForEach(Array(session.messageQueue.enumerated()), id: \.element.id) { index, message in
-                        QueuedMessageRow(
-                            message: message,
-                            index: index,
-                            onSendNow: {
-                                // Remove from queue and send immediately
-                                sessionManager.dequeueMessage(message.id, from: session)
-                                sessionManager.sendImmediately(message.text, to: session)
-                            },
-                            onDelete: {
-                                sessionManager.dequeueMessage(message.id, from: session)
+
+                    Text("\(session.messageQueue.count) queued")
+                        .font(.caption.bold())
+                        .foregroundStyle(.orange)
+
+                    Spacer()
+
+                    if session.messageQueue.count > 1 {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                expanded.toggle()
                             }
-                        )
+                        } label: {
+                            Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(expanded ? "Collapse queue" : "Show all")
                     }
-                    .onMove { source, destination in
-                        sessionManager.moveQueuedMessage(from: source, to: destination, in: session)
+
+                    Button {
+                        session.messageQueue.removeAll()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.borderless)
+                    .help("Clear all queued messages")
                 }
-                .listStyle(.plain)
-            }
-            
-            Divider()
-            
-            // Queue controls
-            HStack {
-                Button {
-                    sessionManager.processNextInQueue(for: session)
-                } label: {
-                    Label("Send Next", systemImage: "arrow.up.circle")
-                        .font(.caption)
+
+                // Message pills
+                let messages = expanded ? session.messageQueue : Array(session.messageQueue.prefix(3))
+                ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                    QueuePill(
+                        message: message,
+                        index: index,
+                        isNext: index == 0,
+                        onSendNow: {
+                            sessionManager.dequeueMessage(message.id, from: session)
+                            sessionManager.sendImmediately(message.text, to: session)
+                        },
+                        onDelete: {
+                            sessionManager.dequeueMessage(message.id, from: session)
+                        }
+                    )
                 }
-                .disabled(session.messageQueue.isEmpty)
-                
-                Spacer()
-                
-                Button(role: .destructive) {
-                    session.messageQueue.removeAll()
-                } label: {
-                    Label("Clear All", systemImage: "trash")
-                        .font(.caption)
+
+                if !expanded && session.messageQueue.count > 3 {
+                    Text("+\(session.messageQueue.count - 3) more")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 4)
                 }
-                .disabled(session.messageQueue.isEmpty)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.bar)
         }
+        .animation(.easeInOut(duration: 0.15), value: session.messageQueue.count)
     }
 }
 
-struct QueuedMessageRow: View {
+/// Compact pill showing a queued message with inline actions.
+struct QueuePill: View {
     let message: QueuedMessage
     let index: Int
+    let isNext: Bool
     var onSendNow: () -> Void
     var onDelete: () -> Void
-    
+
+    @State private var hovering = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
+        HStack(spacing: 6) {
+            // Position indicator
+            if isNext {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            } else {
                 Text("#\(index + 1)")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24)
-                
-                Text(message.text)
-                    .font(.system(.caption, design: .monospaced))
-                    .lineLimit(3)
-                
-                Spacer()
+                    .font(.system(.caption2, design: .monospaced).bold())
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 16)
             }
-            
-            HStack(spacing: 12) {
-                Spacer()
-                
-                Button {
-                    onSendNow()
-                } label: {
-                    Label("Send Now", systemImage: "paperplane")
+
+            // Message text
+            Text(message.text)
+                .font(.system(.caption, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 4)
+
+            // Actions (visible on hover)
+            if hovering {
+                Button(action: onSendNow) {
+                    Image(systemName: "paperplane.fill")
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.blue)
-                
-                Button {
-                    onDelete()
-                } label: {
-                    Label("Remove", systemImage: "xmark")
+                .help("Send now")
+
+                Button(action: onDelete) {
+                    Image(systemName: "xmark")
                         .font(.caption2)
                 }
                 .buttonStyle(.borderless)
-                .foregroundStyle(.red)
+                .foregroundStyle(.secondary)
+                .help("Remove")
             }
         }
+        .padding(.horizontal, 8)
         .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isNext ? Color.orange.opacity(0.08) : Color.primary.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(isNext ? Color.orange.opacity(0.2) : Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .onHover { hovering = $0 }
     }
 }

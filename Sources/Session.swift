@@ -43,6 +43,10 @@ class Session: ObservableObject, Identifiable {
     /// Buffer accumulating PTY output for the current response
     var responseBuffer: String = ""
     var isCollectingResponse: Bool = false
+    var collectionStartTime: Date?
+    var bufferSnapshotLine: Int = 0
+    var pendingFinalization: DispatchWorkItem?
+    var debugLastRawResponse: String = ""
 
     var process: Process?
     var ptyPrimary: FileHandle?

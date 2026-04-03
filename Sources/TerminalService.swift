@@ -60,18 +60,44 @@ class TerminalService {
 
         // Raw buffer for auto-accept detection (accessed on I/O thread)
         var rawBuffer = ""
+        // Buffer for incomplete UTF-8 sequences split across reads
+        var utf8Remainder = Data()
 
         // Read output from the primary side of the PTY
         primaryHandle.readabilityHandler = { [weak session] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
+            // Use low-level read() instead of availableData to avoid abort on closed FD
+            let fd = handle.fileDescriptor
+            guard fd >= 0 else { return }
+            var buffer = [UInt8](repeating: 0, count: 8192)
+            let bytesRead = Darwin.read(fd, &buffer, buffer.count)
+            guard bytesRead > 0 else {
+                if bytesRead <= 0 { handle.readabilityHandler = nil }
+                return
+            }
+            let rawData = Data(buffer[0..<bytesRead])
 
             // Buffer raw data for replay on session switch
-            session?.terminalDataBuffer.append(data)
-            // Feed to the SwiftTerm terminal view
-            session?.terminalFeed?(data)
+            session?.terminalDataBuffer.append(rawData)
+            // Feed to the SwiftTerm terminal view (raw bytes, it handles decoding)
+            session?.terminalFeed?(rawData)
 
-            // Auto-accept prompts on I/O thread
+            // Prepend any leftover bytes from previous read, then split at UTF-8 boundary
+            var data = utf8Remainder + rawData
+            utf8Remainder = Data()
+            // Check if data ends mid-UTF-8 sequence
+            if let lastByte = data.last, lastByte & 0x80 != 0 {
+                var i = data.count - 1
+                while i > max(0, data.count - 4) && data[i] & 0xC0 == 0x80 { i -= 1 }
+                if i >= 0 && data[i] & 0xC0 == 0xC0 {
+                    let lead = data[i]
+                    let expected = lead & 0xE0 == 0xC0 ? 2 : lead & 0xF0 == 0xE0 ? 3 : 4
+                    if data.count - i < expected {
+                        utf8Remainder = Data(data[i...])
+                        data = Data(data[0..<i])
+                    }
+                }
+            }
+
             if let text = String(data: data, encoding: .utf8) {
                 rawBuffer += text
 
@@ -106,28 +132,38 @@ class TerminalService {
                         session.assistantState = .thinking(thinking)
                     }
 
-                    // Detect when Claude finishes (prompt reappears)
-                    if session.isCollectingResponse && OutputParser.containsPrompt(text) {
-                        session.isCollectingResponse = false
-                        let response = OutputParser.extractResponse(session.responseBuffer)
-                        if !response.isEmpty {
-                            let msg = ChatMessage(role: .assistant, content: response)
-                            session.chatMessages.append(msg)
-                        }
-                        session.assistantState = .idle
-                        session.responseBuffer = ""
-                    }
-
+                    // Update status detection
                     self.detectStatus(from: text, session: session)
+
+                    // Debounce-based response finalization:
+                    // When status becomes .waitingForInput, schedule finalization after 1s.
+                    // If status goes back to .running, cancel it.
+                    if session.isCollectingResponse {
+                        if session.status == .running {
+                            // Claude is working — cancel any pending finalization
+                            session.pendingFinalization?.cancel()
+                            session.pendingFinalization = nil
+                        } else if session.status == .waitingForInput && session.pendingFinalization == nil {
+                            // Prompt detected — schedule finalization (debounce 1s)
+                            let work = DispatchWorkItem { [weak self, weak session] in
+                                guard let session = session, session.isCollectingResponse else { return }
+                                self?.finalizeResponse(session: session)
+                            }
+                            session.pendingFinalization = work
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
+                        }
+                    }
                 }
             }
         }
 
         // Handle process termination
-        process.terminationHandler = { [weak session] _ in
+        process.terminationHandler = { [weak session, weak primaryHandle] _ in
+            // Clear readability handler immediately to prevent reads on closed FD
+            primaryHandle?.readabilityHandler = nil
+
             DispatchQueue.main.async {
                 guard let session = session else { return }
-                session.ptyPrimary?.readabilityHandler = nil
                 if let handle = session.ptyPrimary {
                     close(handle.fileDescriptor)
                 }
@@ -164,6 +200,9 @@ class TerminalService {
                 session.chatMessages.append(msg)
                 session.responseBuffer = ""
                 session.isCollectingResponse = true
+                session.collectionStartTime = Date()
+                // Snapshot the terminal buffer position so we can read clean rendered text later
+                session.bufferSnapshotLine = TerminalViewCache.shared.bufferLineCount(for: session.id)
                 session.assistantState = .thinking("Thinking...")
             }
         }
@@ -186,32 +225,35 @@ class TerminalService {
         session.status = .idle
     }
 
+    // MARK: - Response Finalization
+
+    private func finalizeResponse(session: Session) {
+        session.isCollectingResponse = false
+        session.pendingFinalization = nil
+        session.debugLastRawResponse = session.responseBuffer
+
+        let blocks = OutputParser.extractBlocks(session.responseBuffer)
+        if !blocks.isEmpty {
+            let plainText = blocks.compactMap { block -> String? in
+                if case .text(let s) = block { return s }
+                return nil
+            }.joined(separator: "\n")
+            let duration = session.collectionStartTime.map { Date().timeIntervalSince($0) }
+            var msg = ChatMessage(role: .assistant, content: plainText, blocks: blocks)
+            msg.durationSeconds = duration
+            session.chatMessages.append(msg)
+        }
+        session.assistantState = .idle
+        session.responseBuffer = ""
+    }
+
     // MARK: - Status Detection
 
     private func detectStatus(from text: String, session: Session?) {
         guard let session = session else { return }
 
-        // Spinner characters = Claude is actively working
-        let spinners: [Character] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        if text.contains(where: { spinners.contains($0) }) {
-            session.status = .running
-            return
-        }
-
-        // Claude's thinking indicators
-        if text.contains("Noodling") || text.contains("Waddling") || text.contains("Harmonizing")
-            || text.contains("Pondering") || text.contains("Crunching") || text.contains("Churning") {
-            session.status = .running
-            return
-        }
-
-        // The ❯ prompt means Claude is waiting for input
-        // Only match if it's near the end of a chunk (not inside a menu)
-        let clean = text.replacingOccurrences(
-            of: "\u{1B}\\[[0-9;?]*[a-zA-Z]|\u{1B}\\][^\u{07}]*(\u{07}|\u{1B}\\\\)|\u{1B}[^\\[\\]].",
-            with: "",
-            options: .regularExpression
-        )
+        // Check for ❯ prompt FIRST — it takes priority over running indicators
+        let clean = OutputParser.stripAnsi(text)
         let trimmed = clean.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.contains("❯") && !trimmed.contains("trust") && !trimmed.contains("Yes") {
             session.status = .waitingForInput
@@ -220,6 +262,25 @@ class TerminalService {
                     self.processQueueIfNeeded(session: session)
                 }
             }
+            return
+        }
+
+        // Only detect .running if we're actively collecting a response (user sent a message).
+        // This prevents Bristle animations and status bar output from falsely setting .running.
+        guard session.isCollectingResponse else { return }
+
+        let spinners: [Character] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", "✽", "✻", "✶", "✳", "✢", "✹"]
+        if text.contains(where: { spinners.contains($0) }) {
+            session.status = .running
+            return
+        }
+
+        if text.contains("Noodling") || text.contains("Waddling") || text.contains("Harmonizing")
+            || text.contains("Pondering") || text.contains("Crunching") || text.contains("Churning")
+            || text.contains("Bootstrapping") || text.contains("Sprouting") || text.contains("Evaporating")
+            || text.contains("Percolating") || text.contains("Simmering") {
+            session.status = .running
+            return
         }
     }
 

@@ -26,6 +26,7 @@ class SessionManager: ObservableObject {
         let session = Session(name: name, workingDirectory: dir)
         sessions.append(session)
         activeSessionId = session.id
+        launchSession(session)
         return session
     }
     

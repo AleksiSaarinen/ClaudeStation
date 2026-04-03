@@ -2,9 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var sessionManager: SessionManager
+    @State private var sidebarVisibility: NavigationSplitViewVisibility = .detailOnly
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $sidebarVisibility) {
             List(selection: $sessionManager.activeSessionId) {
                 Section("Sessions") {
                     ForEach(sessionManager.sessions) { session in
