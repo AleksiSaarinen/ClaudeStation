@@ -3,12 +3,15 @@ import SwiftUI
 @main
 struct ClaudeStationApp: App {
     @StateObject private var sessionManager = SessionManager()
+    @AppStorage("selectedTheme") private var selectedThemeId = "midnight"
+    @AppStorage("customMonoFont") private var customMonoFont = ""
 
     var body: some Scene {
         // Single-instance Window — prevents URL scheme calls from spawning duplicates
         Window("ClaudeStation", id: "main") {
             ContentView()
                 .environmentObject(sessionManager)
+                .environment(\.theme, Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil))
                 .frame(minWidth: 900, minHeight: 600)
                 .onOpenURL { url in
                     handleURL(url)
@@ -38,6 +41,7 @@ struct ClaudeStationApp: App {
         Settings {
             SettingsView()
                 .environmentObject(sessionManager)
+                .environment(\.theme, Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil))
         }
     }
 

@@ -103,6 +103,13 @@ struct SessionDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                SettingsLink {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .help("Settings (Cmd+,)")
+            }
+
+            ToolbarItem(placement: .automatic) {
                 Button {
                     activeTab = activeTab == .terminal ? .minigame : .terminal
                 } label: {
@@ -114,9 +121,8 @@ struct SessionDetailView: View {
                 .help("Toggle minigame (Cmd+G)")
                 .keyboardShortcut("g", modifiers: .command)
             }
-            
+
             ToolbarItem(placement: .automatic) {
-                // Stop running process
                 if session.status == .running {
                     Button {
                         TerminalService.shared.terminate(session: session)
@@ -135,36 +141,29 @@ struct SessionDetailView: View {
 struct SessionHeaderBar: View {
     @ObservedObject var session: Session
     @Binding var activeTab: DetailTab
+    @Environment(\.theme) var theme
 
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(statusColor)
+                .fill(session.status == .running ? theme.accent : theme.successDot)
                 .frame(width: 6, height: 6)
 
             Text(session.workingDirectory)
                 .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(theme.chromeText)
                 .lineLimit(1)
 
             Spacer()
 
             Text(session.status.rawValue)
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(theme.chromeText)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
+        .background(theme.chromeBar)
         .animation(.easeInOut(duration: 0.3), value: session.status)
-    }
-    
-    var statusColor: Color {
-        switch session.status {
-        case .idle: return .gray
-        case .running: return .green
-        case .waitingForInput: return .orange
-        case .error: return .red
-        }
     }
 }
 
@@ -177,6 +176,7 @@ struct SessionHeaderBar: View {
 struct AttachmentPreview: View {
     let image: NSImage
     var onRemove: () -> Void
+    @Environment(\.theme) var theme
 
     var body: some View {
         HStack(spacing: 8) {
@@ -187,15 +187,16 @@ struct AttachmentPreview: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                        .stroke(theme.chromeBorder, lineWidth: 1)
                 )
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Screenshot")
                     .font(.caption.bold())
+                    .foregroundStyle(theme.chromeText)
                 Text("\(Int(image.size.width))x\(Int(image.size.height))")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.mutedText)
             }
 
             Spacer()
@@ -203,14 +204,14 @@ struct AttachmentPreview: View {
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.mutedText)
             }
             .buttonStyle(.borderless)
             .help("Remove attachment")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(.bar)
+        .background(theme.chromeBar)
     }
 }
 
@@ -221,6 +222,7 @@ struct InputBar: View {
     var hasAttachment: Bool = false
     var onSend: () -> Void
     var onForceQueue: () -> Void
+    @Environment(\.theme) var theme
 
     private var isReady: Bool {
         session.status == .waitingForInput || session.status == .idle
@@ -228,30 +230,29 @@ struct InputBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "chevron.right")
-                .foregroundStyle(isReady ? .green : .orange)
-                .font(.system(.body, design: .monospaced).bold())
+            Text(theme.promptChar)
+                .foregroundStyle(isReady ? theme.promptColor : theme.mutedText)
+                .font(theme.monoFont.bold())
 
             TextField("Message to Claude...", text: $inputText)
                 .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
+                .font(theme.monoFont)
+                .foregroundStyle(theme.assistantText)
                 .focused(inputFocused)
-                .onSubmit {
-                    onSend()
-                }
+                .onSubmit { onSend() }
 
-            // Smart send button — sends if ready, queues if busy
             Button(action: onSend) {
                 Image(systemName: isReady ? "paperplane.fill" : "tray.and.arrow.down")
             }
             .buttonStyle(.borderedProminent)
-            .tint(isReady ? .blue : .orange)
+            .tint(theme.accent)
             .controlSize(.small)
             .help(isReady ? "Send (Enter)" : "Queue (Enter)")
             .keyboardShortcut(.return, modifiers: [])
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(theme.inputBg)
+        .overlay(Divider().frame(maxHeight: 1).background(theme.inputBorder), alignment: .top)
     }
 }

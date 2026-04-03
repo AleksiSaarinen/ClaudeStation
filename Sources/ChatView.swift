@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChatView: View {
     @ObservedObject var session: Session
+    @Environment(\.theme) var theme
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -38,11 +39,12 @@ struct ChatView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 12)
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: session.chatMessages.count)
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(theme.chatBg)
             .onChange(of: session.chatMessages.count) { _, _ in
                 withAnimation(.easeOut(duration: 0.3)) {
                     if let last = session.chatMessages.last {
@@ -65,26 +67,28 @@ struct ChatView: View {
 
 struct WelcomeCard: View {
     @ObservedObject var session: Session
+    @Environment(\.theme) var theme
     @State private var appeared = false
 
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 36))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(theme.mutedText)
                 .scaleEffect(appeared ? 1.0 : 0.5)
                 .opacity(appeared ? 1.0 : 0.0)
             Text("Claude Code")
                 .font(.title3.bold())
+                .foregroundStyle(theme.assistantText)
                 .opacity(appeared ? 1.0 : 0.0)
             Text(session.workingDirectory)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.mutedText)
                 .fontDesign(.monospaced)
                 .opacity(appeared ? 1.0 : 0.0)
             Text(session.status == .waitingForInput ? "Ready. Type a message below." : "Starting Claude...")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.mutedText)
                 .opacity(appeared ? 1.0 : 0.0)
         }
         .frame(maxWidth: .infinity)
@@ -99,22 +103,20 @@ struct WelcomeCard: View {
 
 struct UserMessageRow: View {
     let message: ChatMessage
+    @Environment(\.theme) var theme
     @State private var appeared = false
 
     var body: some View {
         HStack {
             Spacer(minLength: 80)
             Text(message.content)
-                .font(.system(.body, design: .monospaced))
+                .font(theme.monoFont)
+                .foregroundStyle(theme.userBubbleText)
                 .textSelection(.enabled)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.blue.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.blue.opacity(0.15), lineWidth: 1)
-                )
+                .background(theme.userBubble)
+                .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
                 .scaleEffect(appeared ? 1.0 : 0.92)
                 .opacity(appeared ? 1.0 : 0.0)
         }
@@ -128,22 +130,23 @@ struct UserMessageRow: View {
 
 struct AssistantMessageRow: View {
     let message: ChatMessage
+    @Environment(\.theme) var theme
     @State private var appeared = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack(spacing: 5) {
-                Circle().fill(Color.purple).frame(width: 6, height: 6)
-                Text("Claude").font(.caption2.bold()).foregroundStyle(.secondary)
+                Circle().fill(theme.accent).frame(width: 6, height: 6)
+                Text("Claude").font(.caption2.bold()).foregroundStyle(theme.chromeText)
                 if let secs = message.durationSeconds {
-                    Text("·").foregroundStyle(.quaternary)
-                    Image(systemName: "clock").font(.caption2).foregroundStyle(.tertiary)
-                    Text(formatDuration(secs)).font(.caption2).foregroundStyle(.tertiary)
+                    Text("·").foregroundStyle(theme.mutedText)
+                    Image(systemName: "clock").font(.caption2).foregroundStyle(theme.timestampText)
+                    Text(formatDuration(secs)).font(.caption2).foregroundStyle(theme.timestampText)
                 }
                 if let cost = message.costUsd, cost > 0 {
-                    Text("·").foregroundStyle(.quaternary)
-                    Text(String(format: "$%.3f", cost)).font(.caption2).foregroundStyle(.tertiary)
+                    Text("·").foregroundStyle(theme.mutedText)
+                    Text(String(format: "$%.3f", cost)).font(.caption2).foregroundStyle(theme.costText)
                 }
             }
             .padding(.horizontal, 12)
@@ -155,6 +158,7 @@ struct AssistantMessageRow: View {
                 if message.blocks.isEmpty {
                     Text(message.content)
                         .font(.body)
+                        .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
                         .padding(.horizontal, 12)
                 } else {
@@ -181,11 +185,11 @@ struct AssistantMessageRow: View {
             }
             .padding(.bottom, 10)
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(theme.assistantBubble)
+        .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: theme.borderRadius)
+                .stroke(theme.assistantBubbleBorder, lineWidth: 1)
         )
         .padding(.trailing, 24)
         .onAppear {
@@ -201,11 +205,30 @@ struct AssistantMessageRow: View {
     }
 }
 
+// MARK: - Markdown Text
+
+struct MarkdownText: View {
+    let text: String
+    @Environment(\.theme) var theme
+
+    var body: some View {
+        Text(rendered)
+            .font(theme.uiFont)
+            .foregroundStyle(theme.assistantText)
+            .textSelection(.enabled)
+    }
+
+    private var rendered: AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    }
+}
+
 // MARK: - Tool Use Card
 
 struct ToolUseCard: View {
     let name: String
     let input: [String: Any]
+    @Environment(\.theme) var theme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -213,40 +236,30 @@ struct ToolUseCard: View {
                 .font(.caption)
                 .foregroundStyle(toolColor)
                 .frame(width: 16)
-
             Text(name)
-                .font(.system(.caption, design: .monospaced).bold())
+                .font(theme.monoCaptionFont.bold())
                 .foregroundStyle(toolColor)
-
             Text(toolSummary)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(theme.monoCaptionFont)
+                .foregroundStyle(theme.toolCardText)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(Color.primary.opacity(0.03))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(theme.toolCardBg)
+        .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 0)))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(toolColor.opacity(0.15), lineWidth: 1)
+            RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 0))
+                .stroke(theme.toolCardBorder, lineWidth: 1)
         )
     }
 
     private var toolSummary: String {
-        if let path = input["file_path"] as? String {
-            return (path as NSString).lastPathComponent
-        }
-        if let cmd = input["command"] as? String {
-            return String(cmd.prefix(60))
-        }
-        if let pattern = input["pattern"] as? String {
-            return pattern
-        }
-        if let desc = input["description"] as? String {
-            return String(desc.prefix(50))
-        }
+        if let path = input["file_path"] as? String { return (path as NSString).lastPathComponent }
+        if let cmd = input["command"] as? String { return String(cmd.prefix(60)) }
+        if let pattern = input["pattern"] as? String { return pattern }
+        if let desc = input["description"] as? String { return String(desc.prefix(50)) }
         return ""
     }
 
@@ -264,57 +277,30 @@ struct ToolUseCard: View {
         }
     }
 
-    var toolColor: Color {
-        switch name {
-        case "Read": return .blue
-        case "Write": return .green
-        case "Edit": return .orange
-        case "Bash": return .purple
-        case "Glob", "Grep": return .cyan
-        case "Agent": return .indigo
-        default: return .gray
-        }
-    }
-}
-
-// MARK: - Markdown Text
-
-struct MarkdownText: View {
-    let text: String
-
-    var body: some View {
-        // SwiftUI Text supports markdown via LocalizedStringKey on macOS 13+
-        Text(try! AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            .font(.body)
-            .textSelection(.enabled)
-    }
+    var toolColor: Color { theme.accent }
 }
 
 // MARK: - Tool Result Card
 
 struct ToolResultCard: View {
     let content: String
+    @Environment(\.theme) var theme
     @State private var expanded = false
 
     var body: some View {
         if !content.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        expanded.toggle()
-                    }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
+                        Image(systemName: "chevron.right").font(.caption2)
                             .rotationEffect(.degrees(expanded ? 90 : 0))
-                        Text("\(content.components(separatedBy: "\n").count) lines output")
-                            .font(.caption2)
+                        Text("\(content.components(separatedBy: "\n").count) lines output").font(.caption2)
                         Spacer()
                     }
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .foregroundStyle(theme.mutedText)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -322,18 +308,17 @@ struct ToolResultCard: View {
                 if expanded {
                     Text(String(content.prefix(2000)))
                         .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(theme.toolCardText)
                         .textSelection(.enabled)
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 6)
+                        .padding(.horizontal, 10).padding(.bottom, 6)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .background(Color.primary.opacity(0.02))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(theme.toolCardBg)
+            .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 0)))
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 0))
+                    .stroke(theme.toolCardBorder, lineWidth: 1)
             )
         }
     }
@@ -343,6 +328,7 @@ struct ToolResultCard: View {
 
 struct ThinkingIndicator: View {
     let text: String
+    @Environment(\.theme) var theme
     @State private var dotCount = 0
 
     var body: some View {
@@ -350,7 +336,7 @@ struct ThinkingIndicator: View {
             HStack(spacing: 3) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
-                        .fill(Color.purple)
+                        .fill(theme.accent)
                         .frame(width: 5, height: 5)
                         .scaleEffect(dotCount % 3 == i ? 1.3 : 0.7)
                         .opacity(dotCount % 3 == i ? 1.0 : 0.3)
@@ -358,21 +344,18 @@ struct ThinkingIndicator: View {
                 }
             }
             Text(text)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(theme.monoCaptionFont)
+                .foregroundStyle(theme.mutedText)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.purple.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(theme.accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.purple.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: theme.borderRadius)
+                .stroke(theme.accent.opacity(0.15), lineWidth: 1)
         )
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in
-                dotCount += 1
-            }
+            Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in dotCount += 1 }
         }
     }
 }

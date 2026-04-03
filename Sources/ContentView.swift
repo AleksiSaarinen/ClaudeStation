@@ -53,11 +53,12 @@ struct ContentView: View {
 
 struct SessionRow: View {
     @ObservedObject var session: Session
+    @Environment(\.theme) var theme
 
     var body: some View {
         HStack {
             Circle()
-                .fill(statusColor)
+                .fill(session.status == .running ? theme.accent : theme.successDot)
                 .frame(width: 8, height: 8)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -67,7 +68,7 @@ struct SessionRow: View {
 
                 Text(session.workingDirectory)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(theme.mutedText)
                     .lineLimit(1)
             }
 
@@ -78,20 +79,11 @@ struct SessionRow: View {
                     .font(.caption2.bold())
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(.orange.opacity(0.2))
-                    .foregroundStyle(.orange)
+                    .background(theme.accent.opacity(0.2))
+                    .foregroundStyle(theme.accent)
                     .clipShape(Capsule())
             }
         }
         .padding(.vertical, 2)
-    }
-
-    var statusColor: Color {
-        switch session.status {
-        case .idle: return .gray
-        case .running: return .green
-        case .waitingForInput: return .orange
-        case .error: return .red
-        }
     }
 }
