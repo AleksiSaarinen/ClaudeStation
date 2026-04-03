@@ -12,8 +12,13 @@ class TerminalService {
         // Create a pseudo-terminal so Claude Code sees a real TTY
         var primary: Int32 = 0
         var secondary: Int32 = 0
-        // Initial size — SwiftTerm will update this via sizeChanged when it knows its actual size
-        var winSize = winsize(ws_row: 24, ws_col: 80, ws_xpixel: 0, ws_ypixel: 0)
+        // Use SwiftTerm's reported size if available, otherwise default
+        var winSize = winsize(
+            ws_row: UInt16(session.terminalRows),
+            ws_col: UInt16(session.terminalCols),
+            ws_xpixel: 0,
+            ws_ypixel: 0
+        )
 
         guard openpty(&primary, &secondary, nil, nil, &winSize) == 0 else {
             DispatchQueue.main.async {

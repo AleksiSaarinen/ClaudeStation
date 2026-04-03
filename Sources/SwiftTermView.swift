@@ -58,6 +58,10 @@ struct SwiftTermView: NSViewRepresentable {
         }
 
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+            // Always store the size so launch() can use it
+            session.terminalCols = newCols
+            session.terminalRows = newRows
+
             guard let handle = session.ptyPrimary else { return }
             var ws = winsize(
                 ws_row: UInt16(newRows),
@@ -66,7 +70,6 @@ struct SwiftTermView: NSViewRepresentable {
                 ws_ypixel: 0
             )
             ioctl(handle.fileDescriptor, TIOCSWINSZ, &ws)
-            // Signal the process that the terminal size changed
             if let pid = session.process?.processIdentifier, pid > 0 {
                 kill(pid, SIGWINCH)
             }

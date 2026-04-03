@@ -44,6 +44,10 @@ class Session: ObservableObject, Identifiable {
     /// Callback for feeding raw PTY data to the terminal view
     var terminalFeed: ((Data) -> Void)?
 
+    /// Last known terminal size from SwiftTerm (used when launching)
+    var terminalCols: Int = 80
+    var terminalRows: Int = 24
+
     var displayName: String {
         if !name.isEmpty { return name }
         let dir = (workingDirectory as NSString).lastPathComponent
