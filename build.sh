@@ -44,6 +44,17 @@ if [ ! -f "$APP/Contents/Info.plist" ]; then
     <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>ClaudeStation Commands</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>claudestation</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST
