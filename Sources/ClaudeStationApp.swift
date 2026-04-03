@@ -56,11 +56,8 @@ struct ClaudeStationApp: App {
 
         switch command {
         case "launch":
-            if let session = sessionManager.activeSession {
-                if session.process == nil || session.status == .idle {
-                    sessionManager.launchSession(session)
-                }
-            }
+            // No-op in stream-json mode (sessions are always ready)
+            break
 
         case "send":
             if let text = params["text"], let session = sessionManager.activeSession {

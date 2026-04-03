@@ -26,7 +26,8 @@ class SessionManager: ObservableObject {
         let session = Session(name: name, workingDirectory: dir)
         sessions.append(session)
         activeSessionId = session.id
-        launchSession(session)
+        // No PTY launch needed — stream-json mode spawns per message
+        session.status = .waitingForInput
         return session
     }
     
@@ -54,12 +55,6 @@ class SessionManager: ObservableObject {
         if sessions.isEmpty {
             createSession()
         }
-    }
-    
-    // MARK: - Launch
-    
-    func launchSession(_ session: Session) {
-        TerminalService.shared.launch(session: session, settings: settings)
     }
     
     // MARK: - Message Queue

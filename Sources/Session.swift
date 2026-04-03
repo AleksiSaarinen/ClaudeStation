@@ -32,34 +32,27 @@ class Session: ObservableObject, Identifiable {
 
     @Published var name: String
     @Published var workingDirectory: String
-    @Published var outputBuffer: String = ""
     @Published var status: SessionStatus = .idle
     @Published var messageQueue: [QueuedMessage] = []
     @Published var isProcessingQueue: Bool = false
     @Published var chatMessages: [ChatMessage] = []
     @Published var assistantState: AssistantState = .idle
-    var trustAccepted: Bool = false
 
-    /// Buffer accumulating PTY output for the current response
-    var responseBuffer: String = ""
-    var isCollectingResponse: Bool = false
-    var collectionStartTime: Date?
-    var bufferSnapshotLine: Int = 0
-    var pendingFinalization: DispatchWorkItem?
-    var debugLastRawResponse: String = ""
+    /// Claude Code session ID for --resume multi-turn
+    var claudeSessionId: String?
 
-    var process: Process?
-    var ptyPrimary: FileHandle?
+    /// Currently running claude process (one per message)
+    var activeProcess: Process?
 
-    /// Callback for feeding raw PTY data to the terminal view
+    /// Callback for feeding raw PTY data to the terminal view (kept for SwiftTerm)
     var terminalFeed: ((Data) -> Void)?
-
-    /// Buffer of all raw PTY data — replayed when switching sessions
     var terminalDataBuffer = Data()
-
-    /// Last known terminal size from SwiftTerm (used when launching)
     var terminalCols: Int = 80
     var terminalRows: Int = 24
+
+    // Legacy PTY fields (kept for SwiftTerm background view)
+    var process: Process?
+    var ptyPrimary: FileHandle?
 
     var displayName: String {
         if !name.isEmpty { return name }

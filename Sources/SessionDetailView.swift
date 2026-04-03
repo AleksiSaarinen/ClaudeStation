@@ -116,13 +116,14 @@ struct SessionDetailView: View {
             }
             
             ToolbarItem(placement: .automatic) {
-                // Relaunch if process died
-                if session.status == .idle {
+                // Stop running process
+                if session.status == .running {
                     Button {
-                        sessionManager.launchSession(session)
+                        TerminalService.shared.terminate(session: session)
                     } label: {
-                        Label("Relaunch", systemImage: "arrow.counterclockwise")
+                        Label("Stop", systemImage: "stop.fill")
                     }
+                    .tint(.red)
                 }
             }
         }

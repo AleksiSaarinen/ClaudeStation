@@ -79,8 +79,7 @@ struct ProfilesSettingsTab: View {
                         Spacer()
 
                         Button("Launch") {
-                            let session = sessionManager.createSessionFromProfile(profile)
-                            sessionManager.launchSession(session)
+                            sessionManager.createSessionFromProfile(profile)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
