@@ -37,6 +37,11 @@ struct ChatView: View {
                             .id("thinking")
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                     }
+
+                    // Invisible scroll anchor at the very bottom
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom")
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -46,16 +51,16 @@ struct ChatView: View {
             }
             .background(theme.chatBg)
             .onChange(of: session.chatMessages.count) { _, _ in
-                withAnimation(.easeOut(duration: 0.3)) {
-                    if let last = session.chatMessages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo("bottom")
                     }
                 }
             }
             .onChange(of: session.assistantState) { _, newState in
                 if case .thinking = newState {
                     withAnimation(.easeOut(duration: 0.3)) {
-                        proxy.scrollTo("thinking", anchor: .bottom)
+                        proxy.scrollTo("bottom")
                     }
                 }
             }
