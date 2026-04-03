@@ -36,7 +36,13 @@ class Session: ObservableObject, Identifiable {
     @Published var status: SessionStatus = .idle
     @Published var messageQueue: [QueuedMessage] = []
     @Published var isProcessingQueue: Bool = false
+    @Published var chatMessages: [ChatMessage] = []
+    @Published var assistantState: AssistantState = .idle
     var trustAccepted: Bool = false
+
+    /// Buffer accumulating PTY output for the current response
+    var responseBuffer: String = ""
+    var isCollectingResponse: Bool = false
 
     var process: Process?
     var ptyPrimary: FileHandle?

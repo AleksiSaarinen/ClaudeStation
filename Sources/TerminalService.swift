@@ -93,8 +93,31 @@ class TerminalService {
                     handle.write(Data([0x0D])) // Enter
                 }
 
-                // Status detection on main thread
                 DispatchQueue.main.async {
+                    guard let session = session else { return }
+
+                    // Accumulate response text
+                    if session.isCollectingResponse {
+                        session.responseBuffer += text
+                    }
+
+                    // Detect thinking indicators
+                    if let thinking = OutputParser.thinkingIndicator(in: text) {
+                        session.assistantState = .thinking(thinking)
+                    }
+
+                    // Detect when Claude finishes (prompt reappears)
+                    if session.isCollectingResponse && OutputParser.containsPrompt(text) {
+                        session.isCollectingResponse = false
+                        let response = OutputParser.extractResponse(session.responseBuffer)
+                        if !response.isEmpty {
+                            let msg = ChatMessage(role: .assistant, content: response)
+                            session.chatMessages.append(msg)
+                        }
+                        session.assistantState = .idle
+                        session.responseBuffer = ""
+                    }
+
                     self.detectStatus(from: text, session: session)
                 }
             }
@@ -133,6 +156,18 @@ class TerminalService {
 
     func send(text: String, to session: Session) {
         guard let handle = session.ptyPrimary else { return }
+
+        // Record user message in chat
+        if !text.isEmpty {
+            let msg = ChatMessage(role: .user, content: text)
+            DispatchQueue.main.async {
+                session.chatMessages.append(msg)
+                session.responseBuffer = ""
+                session.isCollectingResponse = true
+                session.assistantState = .thinking("Thinking...")
+            }
+        }
+
         let data = (text + "\r").data(using: .utf8)!
         handle.write(data)
     }

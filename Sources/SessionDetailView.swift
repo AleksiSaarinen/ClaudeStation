@@ -22,24 +22,25 @@ struct SessionDetailView: View {
             Divider()
             
             HSplitView {
-                // Main content area — terminal or minigame
                 VStack(spacing: 0) {
-                    switch activeTab {
-                    case .terminal:
+                    ZStack {
+                        // SwiftTerm behind the chat (full size for proper PTY)
                         SwiftTermView(session: session)
                             .id(session.id)
-                    case .minigame:
-                        MinigameView(bridge: minigameBridge)
+                            .allowsHitTesting(false)
+
+                        // Chat view on top
+                        ChatView(session: session)
                     }
-                    
+
                     Divider()
-                    
-                    // Input bar (always visible — you can queue messages while playing)
+
+                    // Input bar
                     InputBar(
                         inputText: $inputText,
                         inputFocused: $inputFocused,
                         onSendImmediate: {
-                            // Allow empty sends — acts as pressing Enter in the terminal
+                            guard !inputText.isEmpty else { return }
                             sessionManager.sendImmediately(inputText, to: session)
                             inputText = ""
                         },
@@ -114,29 +115,17 @@ struct SessionDetailView: View {
 struct SessionHeaderBar: View {
     @ObservedObject var session: Session
     @Binding var activeTab: DetailTab
-    
+
     var body: some View {
         HStack {
-            // Working directory
             Image(systemName: "folder")
                 .foregroundStyle(.secondary)
             Text(session.workingDirectory)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
-            
+
             Spacer()
-            
-            // Tab switcher
-            Picker("View", selection: $activeTab) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 220)
-            
-            Spacer()
-            
+
             // Status pill
             HStack(spacing: 4) {
                 Circle()
