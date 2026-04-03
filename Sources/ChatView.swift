@@ -162,9 +162,7 @@ struct AssistantMessageRow: View {
                         Group {
                             switch block {
                             case .text(let text):
-                                Text(text)
-                                    .font(.body)
-                                    .textSelection(.enabled)
+                                MarkdownText(text: text)
                             case .toolUse(_, let name, let input):
                                 ToolUseCard(name: name, input: input)
                             case .toolResult(_, let content):
@@ -225,8 +223,6 @@ struct ToolUseCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-
-            Spacer()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -278,6 +274,19 @@ struct ToolUseCard: View {
         case "Agent": return .indigo
         default: return .gray
         }
+    }
+}
+
+// MARK: - Markdown Text
+
+struct MarkdownText: View {
+    let text: String
+
+    var body: some View {
+        // SwiftUI Text supports markdown via LocalizedStringKey on macOS 13+
+        Text(try! AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            .font(.body)
+            .textSelection(.enabled)
     }
 }
 

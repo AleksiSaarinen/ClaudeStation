@@ -133,8 +133,27 @@ class TerminalService {
                                 let name = block["name"] as? String ?? "Unknown"
                                 let input = block["input"] as? [String: Any] ?? [:]
                                 blocks.append(.toolUse(id: toolId, name: name, input: input))
+                                let label: String = {
+                                    let file = (input["file_path"] as? String ?? "").components(separatedBy: "/").last ?? ""
+                                    switch name {
+                                    case "Read": return "Reading \(file)..."
+                                    case "Write": return "Writing \(file)..."
+                                    case "Edit": return "Editing \(file)..."
+                                    case "Bash":
+                                        let cmd = (input["command"] as? String ?? "").prefix(50)
+                                        return "Running: \(cmd)"
+                                    case "Glob": return "Searching: \(input["pattern"] as? String ?? "files")..."
+                                    case "Grep": return "Grep: \(input["pattern"] as? String ?? "")..."
+                                    case "Agent":
+                                        let desc = input["description"] as? String ?? input["prompt"] as? String ?? "task"
+                                        return "Agent: \(desc.prefix(40))..."
+                                    case "WebSearch": return "Searching: \(input["query"] as? String ?? "")..."
+                                    case "WebFetch": return "Fetching URL..."
+                                    default: return "\(name)..."
+                                    }
+                                }()
                                 DispatchQueue.main.async {
-                                    session.assistantState = .thinking("Using \(name)...")
+                                    session.assistantState = .thinking(label)
                                 }
 
                             default:
