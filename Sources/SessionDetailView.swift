@@ -27,6 +27,7 @@ struct SessionDetailView: View {
                     switch activeTab {
                     case .terminal:
                         SwiftTermView(session: session)
+                            .id(session.id)
                     case .minigame:
                         MinigameView(bridge: minigameBridge)
                     }

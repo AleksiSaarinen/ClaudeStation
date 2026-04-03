@@ -1,19 +1,32 @@
 import SwiftUI
 import SwiftTerm
 
-/// NSViewRepresentable wrapping SwiftTerm's TerminalView for proper terminal emulation
-struct SwiftTermView: NSViewRepresentable {
-    @ObservedObject var session: Session
+/// Cache of TerminalView instances per session — survives view recreation
+class TerminalViewCache {
+    static let shared = TerminalViewCache()
+    private var views: [UUID: TerminalView] = [:]
+    private var coordinators: [UUID: SwiftTermView.Coordinator] = [:]
 
-    func makeNSView(context: Context) -> TerminalView {
+    func terminalView(for session: Session, coordinator: SwiftTermView.Coordinator) -> TerminalView {
+        if let existing = views[session.id] {
+            // Update coordinator's session reference and delegate
+            existing.terminalDelegate = coordinator
+            coordinator.terminalView = existing
+            coordinators[session.id] = coordinator
+            return existing
+        }
+
         let tv = TerminalView(frame: .zero)
-        tv.terminalDelegate = context.coordinator
+        tv.terminalDelegate = coordinator
         tv.nativeBackgroundColor = .black
         tv.nativeForegroundColor = .white
+        coordinator.terminalView = tv
+        views[session.id] = tv
+        coordinators[session.id] = coordinator
 
-        // Register this terminal view with the session for PTY output feeding
-        context.coordinator.terminalView = tv
-        session.terminalFeed = { data in
+        // Set up PTY feed
+        session.terminalFeed = { [weak tv] data in
+            guard let tv = tv else { return }
             let bytes = Array(data)
             DispatchQueue.main.async {
                 tv.feed(byteArray: bytes[...])
@@ -23,17 +36,26 @@ struct SwiftTermView: NSViewRepresentable {
         return tv
     }
 
+    func remove(sessionId: UUID) {
+        views.removeValue(forKey: sessionId)
+        coordinators.removeValue(forKey: sessionId)
+    }
+}
+
+/// NSViewRepresentable wrapping SwiftTerm's TerminalView for proper terminal emulation
+struct SwiftTermView: NSViewRepresentable {
+    @ObservedObject var session: Session
+
+    func makeNSView(context: Context) -> TerminalView {
+        let tv = TerminalViewCache.shared.terminalView(for: session, coordinator: context.coordinator)
+        return tv
+    }
+
     func updateNSView(_ nsView: TerminalView, context: Context) {
-        // Re-register feed callback if session changed
-        if context.coordinator.session !== session {
-            context.coordinator.session = session
-            context.coordinator.terminalView = nsView
-            session.terminalFeed = { data in
-                let bytes = Array(data)
-                DispatchQueue.main.async {
-                    nsView.feed(byteArray: bytes[...])
-                }
-            }
+        // If the view in the cache differs from what's displayed, swap it
+        let cached = TerminalViewCache.shared.terminalView(for: session, coordinator: context.coordinator)
+        if cached !== nsView {
+            // Can't swap NSViews in updateNSView — the .id() handles this
         }
     }
 
@@ -51,14 +73,13 @@ struct SwiftTermView: NSViewRepresentable {
 
         // MARK: - TerminalViewDelegate
 
-        /// User typed in the terminal — forward to PTY
         func send(source: TerminalView, data: ArraySlice<UInt8>) {
             guard let handle = session.ptyPrimary else { return }
             handle.write(Data(data))
         }
 
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-            // Always store the size so launch() can use it
+            guard newCols > 0, newRows > 0 else { return }
             session.terminalCols = newCols
             session.terminalRows = newRows
 
@@ -69,16 +90,13 @@ struct SwiftTermView: NSViewRepresentable {
                 ws_xpixel: 0,
                 ws_ypixel: 0
             )
-            ioctl(handle.fileDescriptor, TIOCSWINSZ, &ws)
+            _ = ioctl(handle.fileDescriptor, TIOCSWINSZ, &ws)
             if let pid = session.process?.processIdentifier, pid > 0 {
                 kill(pid, SIGWINCH)
             }
         }
 
-        func setTerminalTitle(source: TerminalView, title: String) {
-            // Could update session name here
-        }
-
+        func setTerminalTitle(source: TerminalView, title: String) {}
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
         func scrolled(source: TerminalView, position: Double) {}
 

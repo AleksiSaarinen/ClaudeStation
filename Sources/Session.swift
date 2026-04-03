@@ -44,6 +44,9 @@ class Session: ObservableObject, Identifiable {
     /// Callback for feeding raw PTY data to the terminal view
     var terminalFeed: ((Data) -> Void)?
 
+    /// Buffer of all raw PTY data — replayed when switching sessions
+    var terminalDataBuffer = Data()
+
     /// Last known terminal size from SwiftTerm (used when launching)
     var terminalCols: Int = 80
     var terminalRows: Int = 24

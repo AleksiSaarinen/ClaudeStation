@@ -66,7 +66,9 @@ class TerminalService {
             let data = handle.availableData
             guard !data.isEmpty else { return }
 
-            // Feed raw data to the SwiftTerm terminal view
+            // Buffer raw data for replay on session switch
+            session?.terminalDataBuffer.append(data)
+            // Feed to the SwiftTerm terminal view
             session?.terminalFeed?(data)
 
             // Auto-accept prompts on I/O thread
