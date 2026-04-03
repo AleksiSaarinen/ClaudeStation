@@ -21,7 +21,7 @@ struct SettingsView: View {
                     Label("Profiles", systemImage: "person.crop.rectangle.stack")
                 }
         }
-        .frame(width: 560, height: 420)
+        .frame(width: 600, height: 480)
     }
 }
 
@@ -36,53 +36,58 @@ struct ThemeSettingsTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(Theme.all) { t in
-                        ThemeSwatch(theme: t, isSelected: t.id == selectedThemeId)
-                            .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    selectedThemeId = t.id
+            VStack(alignment: .leading, spacing: 20) {
+                // Font picker
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Font")
+                        .font(.headline)
+                    let fontCols = [GridItem(.adaptive(minimum: 105, maximum: 140), spacing: 8)]
+                    LazyVGrid(columns: fontCols, spacing: 8) {
+                        ForEach(Theme.availableMonoFonts, id: \.self) { font in
+                            let active = (customMonoFont.isEmpty ? theme.fontMono : customMonoFont) == font
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    customMonoFont = font
                                 }
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Text("Aa 01")
+                                        .font(.custom(font, size: 13))
+                                        .frame(height: 18)
+                                    Text(font)
+                                        .font(.caption2)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(active ? theme.accent.opacity(0.15) : Color.primary.opacity(0.03))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(active ? theme.accent : Color.primary.opacity(0.1), lineWidth: active ? 2 : 1)
+                                )
                             }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
 
                 Divider()
 
+                // Theme picker
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Monospace Font")
-                        .font(.caption.bold())
-
-                    HStack(spacing: 8) {
-                        ForEach(Theme.availableMonoFonts, id: \.self) { font in
-                            let isSelected = (customMonoFont.isEmpty ? theme.fontMono : customMonoFont) == font
-                            let isInstalled = NSFont(name: font, size: 13) != nil
-                            if isInstalled {
-                                Button {
-                                    withAnimation(.easeInOut(duration: 0.15)) {
-                                        customMonoFont = font
+                    Text("Theme")
+                        .font(.headline)
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(Theme.all) { t in
+                            ThemeSwatch(theme: t, isSelected: t.id == selectedThemeId)
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        selectedThemeId = t.id
                                     }
-                                } label: {
-                                    Text("Aa")
-                                        .font(.custom(font, size: 12))
-                                        .frame(width: 36, height: 28)
-                                        .background(isSelected ? theme.accent.opacity(0.15) : theme.toolCardBg)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(isSelected ? theme.accent : theme.toolCardBorder, lineWidth: 1)
-                                        )
                                 }
-                                .buttonStyle(.plain)
-                                .help(font)
-                            }
                         }
                     }
-
-                    Text("Selected: \(customMonoFont.isEmpty ? theme.fontMono : customMonoFont)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
             .padding(20)

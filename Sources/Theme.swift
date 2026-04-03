@@ -204,9 +204,6 @@ extension Theme {
             fontMono: mono ?? fontMono, fontUI: ui ?? fontUI, borderRadius: borderRadius
         )
     }
-}
-
-// MARK: - Theme Environment
 
     /// Available monospaced fonts for the picker
     static let availableMonoFonts = [
@@ -222,6 +219,9 @@ extension Theme {
     var uiFont: Font { fontUI == ".AppleSystemUIFont" ? .body : .custom(fontUI, size: 13) }
     var uiCaptionFont: Font { fontUI == ".AppleSystemUIFont" ? .caption : .custom(fontUI, size: 11) }
     var uiCaption2Font: Font { fontUI == ".AppleSystemUIFont" ? .caption2 : .custom(fontUI, size: 10) }
+}
+
+// MARK: - Theme Environment
 
 private struct ThemeKey: EnvironmentKey {
     static let defaultValue = Theme.midnight
