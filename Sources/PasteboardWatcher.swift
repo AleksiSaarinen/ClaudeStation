@@ -16,7 +16,7 @@ class PasteboardWatcher: ObservableObject {
     func startWatching() {
         lastChangeCount = NSPasteboard.general.changeCount
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.checkPasteboard()
         }
     }

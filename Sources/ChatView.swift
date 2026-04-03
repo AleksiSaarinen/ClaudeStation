@@ -172,8 +172,8 @@ struct AssistantMessageRow: View {
                             switch block.kind {
                             case .text(let text):
                                 MarkdownText(text: text)
-                            case .toolUse(let name, let input):
-                                ToolUseCard(name: name, input: input)
+                            case .toolUse(let name, _):
+                                ToolUseCard(name: name, input: block.toolInput)
                             case .toolResult(let content):
                                 ToolResultCard(content: content)
                             }
@@ -311,12 +311,20 @@ struct ToolResultCard: View {
                 .buttonStyle(.plain)
 
                 if expanded {
-                    Text(String(content.prefix(2000)))
-                        .font(theme.monoCaption2Font)
-                        .foregroundStyle(theme.toolCardText)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 10).padding(.bottom, 6)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(String(content.prefix(2000)))
+                            .font(theme.monoCaption2Font)
+                            .foregroundStyle(theme.toolCardText)
+                            .textSelection(.enabled)
+                        if content.count > 2000 {
+                            Text("... truncated (\(content.count - 2000) more characters)")
+                                .font(theme.monoCaption2Font)
+                                .foregroundStyle(theme.mutedText)
+                                .italic()
+                        }
+                    }
+                    .padding(.horizontal, 10).padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .background(theme.toolCardBg)

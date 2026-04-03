@@ -13,6 +13,7 @@ struct SessionDetailView: View {
     @StateObject private var minigameBridge = MinigameBridge()
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
+    @State private var taskStartTime: Date?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -93,12 +94,14 @@ struct SessionDetailView: View {
         .onChange(of: session.status) { oldStatus, newStatus in
             minigameBridge.sessionStatusChanged(newStatus.rawValue)
             
-            // Reward tokens when Claude finishes a task
-            if oldStatus == .running && newStatus == .waitingForInput {
-                minigameBridge.taskCompleted(durationSeconds: 30) // TODO: track actual duration
-            }
             if oldStatus == .waitingForInput && newStatus == .running {
+                taskStartTime = Date()
                 minigameBridge.taskStarted()
+            }
+            if oldStatus == .running && newStatus == .waitingForInput {
+                let duration = taskStartTime.map { Date().timeIntervalSince($0) } ?? 30
+                minigameBridge.taskCompleted(durationSeconds: duration)
+                taskStartTime = nil
             }
         }
         .toolbar {

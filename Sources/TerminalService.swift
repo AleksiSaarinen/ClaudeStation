@@ -47,6 +47,17 @@ class TerminalService {
         let pipe = Pipe()
         let errorPipe = Pipe()
 
+        // Validate working directory
+        if !FileManager.default.fileExists(atPath: workDir) {
+            DispatchQueue.main.async {
+                let err = ChatMessage(role: .assistant, content: "Error: Working directory not found: \(workDir)")
+                session.chatMessages.append(err)
+                session.status = .waitingForInput
+                session.assistantState = .idle
+            }
+            return
+        }
+
         // Build full command string and run via shell (resolves PATH)
         let workDir = (session.workingDirectory as NSString).expandingTildeInPath
         let escapedText = text.replacingOccurrences(of: "'", with: "'\\''")
@@ -67,17 +78,19 @@ class TerminalService {
 
         // Collect events on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.runAndCollect(process: process, pipe: pipe, session: session, startTime: startTime)
+            self?.runAndCollect(process: process, pipe: pipe, errorPipe: errorPipe, session: session, startTime: startTime)
         }
     }
 
     // MARK: - Run Process & Collect JSON Events
 
-    private func runAndCollect(process: Process, pipe: Pipe, session: Session, startTime: Date) {
+    private func runAndCollect(process: Process, pipe: Pipe, errorPipe: Pipe, session: Session, startTime: Date) {
         do {
             try process.run()
         } catch {
             DispatchQueue.main.async {
+                let err = ChatMessage(role: .assistant, content: "Failed to launch claude: \(error.localizedDescription)")
+                session.chatMessages.append(err)
                 session.status = .error
                 session.assistantState = .idle
             }
@@ -197,10 +210,20 @@ class TerminalService {
 
         process.waitUntilExit()
 
+        // Read stderr for error messages
+        let stderrData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
         // Finalize on main thread
         let duration = Date().timeIntervalSince(startTime)
         DispatchQueue.main.async {
             session.activeProcess = nil
+
+            // Show error if process failed with no response
+            if blocks.isEmpty && process.terminationStatus != 0 && !stderrText.isEmpty {
+                let err = ChatMessage(role: .assistant, content: "Error: \(stderrText)")
+                session.chatMessages.append(err)
+            }
 
             if !blocks.isEmpty {
                 let plainText = plainTextParts.joined(separator: "\n")

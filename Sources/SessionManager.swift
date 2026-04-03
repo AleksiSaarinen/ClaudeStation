@@ -13,21 +13,45 @@ class SessionManager: ObservableObject {
         sessions.first { $0.id == activeSessionId }
     }
     
+    private var saveDebounce: DispatchWorkItem?
+
     init() {
-        // Start with one default session
-        createSession()
+        // Restore saved sessions or start fresh
+        let restored = SessionPersistence.load()
+        if restored.isEmpty {
+            createSession()
+        } else {
+            sessions = restored
+            activeSessionId = sessions.first?.id
+        }
+    }
+
+    /// Save sessions to disk (debounced)
+    func scheduleSave() {
+        saveDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            SessionPersistence.save(sessions: self.sessions)
+        }
+        saveDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
     }
     
     // MARK: - Session Lifecycle
     
     @discardableResult
     func createSession(name: String = "", workingDirectory: String? = nil) -> Session {
-        let dir = workingDirectory ?? settings.defaultWorkingDirectory
-        let session = Session(name: name, workingDirectory: dir)
+        let rawDir = workingDirectory ?? settings.defaultWorkingDirectory
+        let dir = (rawDir as NSString).expandingTildeInPath
+        // Validate directory exists, fall back to home
+        let validDir = FileManager.default.fileExists(atPath: dir) ? rawDir : "~"
+        let trimmedName = String(name.prefix(50))
+        let session = Session(name: trimmedName, workingDirectory: validDir)
         sessions.append(session)
         activeSessionId = session.id
         // No PTY launch needed — stream-json mode spawns per message
         session.status = .waitingForInput
+        scheduleSave()
         return session
     }
     
@@ -55,6 +79,7 @@ class SessionManager: ObservableObject {
         if sessions.isEmpty {
             createSession()
         }
+        scheduleSave()
     }
     
     // MARK: - Message Queue
@@ -62,6 +87,7 @@ class SessionManager: ObservableObject {
     /// Send a message — TerminalService handles queueing if busy
     func sendImmediately(_ text: String, to session: Session) {
         TerminalService.shared.send(text: text, to: session)
+        scheduleSave()
     }
 
     /// Explicitly queue a message (for force-queue scenarios)
