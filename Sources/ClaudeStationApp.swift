@@ -67,7 +67,11 @@ struct ClaudeStationApp: App {
 
         case "send":
             if let text = params["text"], let session = sessionManager.activeSession {
-                sessionManager.sendImmediately(text, to: session)
+                if session.status == .waitingForInput || session.status == .idle {
+                    sessionManager.sendImmediately(text, to: session)
+                } else {
+                    sessionManager.queueMessage(text, for: session)
+                }
             }
 
         case "enter":

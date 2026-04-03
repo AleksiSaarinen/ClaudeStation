@@ -12,6 +12,12 @@ class TerminalService {
     func send(text: String, to session: Session) {
         guard !text.isEmpty else { return }
 
+        // Prevent concurrent processes — queue if busy
+        if session.activeProcess != nil {
+            session.messageQueue.append(QueuedMessage(text: text))
+            return
+        }
+
         // Record user message
         let userMsg = ChatMessage(role: .user, content: text)
         DispatchQueue.main.async {

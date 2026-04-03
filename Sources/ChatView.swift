@@ -157,7 +157,7 @@ struct AssistantMessageRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 if message.blocks.isEmpty {
                     Text(message.content)
-                        .font(.body)
+                        .font(theme.monoFont)
                         .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
                         .padding(.horizontal, 12)
@@ -213,7 +213,7 @@ struct MarkdownText: View {
 
     var body: some View {
         Text(rendered)
-            .font(theme.uiFont)
+            .font(theme.monoFont)
             .foregroundStyle(theme.assistantText)
             .textSelection(.enabled)
     }
@@ -307,7 +307,7 @@ struct ToolResultCard: View {
 
                 if expanded {
                     Text(String(content.prefix(2000)))
-                        .font(.system(.caption2, design: .monospaced))
+                        .font(theme.monoCaption2Font)
                         .foregroundStyle(theme.toolCardText)
                         .textSelection(.enabled)
                         .padding(.horizontal, 10).padding(.bottom, 6)
