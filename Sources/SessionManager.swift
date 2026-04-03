@@ -59,39 +59,14 @@ class SessionManager: ObservableObject {
     
     // MARK: - Message Queue
     
-    /// Add a message to a session's queue
-    func queueMessage(_ text: String, for session: Session) {
-        let message = QueuedMessage(text: text)
-        session.messageQueue.append(message)
-        
-        // Auto-process if the session is waiting for input
-        if settings.autoProcessQueue && session.status == .waitingForInput {
-            processNextInQueue(for: session)
-        }
-    }
-    
-    /// Send a message immediately, bypassing the queue
+    /// Send a message — TerminalService handles queueing if busy
     func sendImmediately(_ text: String, to session: Session) {
         TerminalService.shared.send(text: text, to: session)
     }
-    
-    /// Process the next queued message for a session
-    func processNextInQueue(for session: Session) {
-        guard !session.messageQueue.isEmpty else {
-            session.isProcessingQueue = false
-            return
-        }
-        
-        guard session.status == .waitingForInput || session.status == .idle else {
-            // Not ready yet, will retry when status changes
-            return
-        }
-        
-        session.isProcessingQueue = true
-        var message = session.messageQueue.removeFirst()
-        message.status = .sending
-        
-        TerminalService.shared.send(text: message.text, to: session)
+
+    /// Explicitly queue a message (for force-queue scenarios)
+    func queueMessage(_ text: String, for session: Session) {
+        session.messageQueue.append(QueuedMessage(text: text))
     }
     
     /// Remove a queued message before it's sent

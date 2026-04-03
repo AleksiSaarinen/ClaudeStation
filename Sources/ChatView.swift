@@ -169,12 +169,12 @@ struct AssistantMessageRow: View {
                 } else {
                     ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
                         Group {
-                            switch block {
+                            switch block.kind {
                             case .text(let text):
                                 MarkdownText(text: text)
-                            case .toolUse(_, let name, let input):
+                            case .toolUse(let name, let input):
                                 ToolUseCard(name: name, input: input)
-                            case .toolResult(_, let content):
+                            case .toolResult(let content):
                                 ToolResultCard(content: content)
                             }
                         }
@@ -335,6 +335,7 @@ struct ThinkingIndicator: View {
     let text: String
     @Environment(\.theme) var theme
     @State private var dotCount = 0
+    @State private var timer: Timer?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -360,7 +361,11 @@ struct ThinkingIndicator: View {
                 .stroke(theme.accent.opacity(0.15), lineWidth: 1)
         )
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in dotCount += 1 }
+            timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in dotCount += 1 }
+        }
+        .onDisappear {
+            timer?.invalidate()
+            timer = nil
         }
     }
 }

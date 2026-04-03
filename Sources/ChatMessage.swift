@@ -22,18 +22,25 @@ enum AssistantState: Equatable {
 }
 
 /// A structured block within an assistant response
-enum ContentBlock: Identifiable {
-    case text(String)
-    case toolUse(id: String, name: String, input: [String: Any])
-    case toolResult(toolUseId: String, content: String)
+struct ContentBlock: Identifiable {
+    let id: String
+    let kind: ContentBlockKind
 
-    var id: String {
-        switch self {
-        case .text(let s): return "text-\(s.prefix(40).hashValue)"
-        case .toolUse(let id, _, _): return "tool-\(id)"
-        case .toolResult(let id, _): return "result-\(id)"
-        }
+    static func text(_ text: String) -> ContentBlock {
+        ContentBlock(id: "text-\(UUID().uuidString)", kind: .text(text))
     }
+    static func toolUse(id: String, name: String, input: [String: Any]) -> ContentBlock {
+        ContentBlock(id: "tool-\(id)", kind: .toolUse(name: name, input: input))
+    }
+    static func toolResult(toolUseId: String, content: String) -> ContentBlock {
+        ContentBlock(id: "result-\(toolUseId)", kind: .toolResult(content: content))
+    }
+}
+
+enum ContentBlockKind {
+    case text(String)
+    case toolUse(name: String, input: [String: Any])
+    case toolResult(content: String)
 }
 
 struct ChatMessage: Identifiable {

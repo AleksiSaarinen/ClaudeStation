@@ -6,8 +6,11 @@ class TerminalViewCache {
     static let shared = TerminalViewCache()
     private var views: [UUID: TerminalView] = [:]
     private var coordinators: [UUID: SwiftTermView.Coordinator] = [:]
+    private let lock = NSLock()
 
     func terminalView(for session: Session, coordinator: SwiftTermView.Coordinator) -> TerminalView {
+        lock.lock()
+        defer { lock.unlock() }
         if let existing = views[session.id] {
             // Update coordinator's session reference and delegate
             existing.terminalDelegate = coordinator
@@ -37,12 +40,16 @@ class TerminalViewCache {
     }
 
     func remove(sessionId: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
         views.removeValue(forKey: sessionId)
         coordinators.removeValue(forKey: sessionId)
     }
 
     /// Get current buffer line count by iterating getLine()
     func bufferLineCount(for sessionId: UUID) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
         guard let tv = views[sessionId] else { return 0 }
         let terminal = tv.getTerminal()
         var count = 0
@@ -54,6 +61,8 @@ class TerminalViewCache {
     /// Uses BufferLine.translateToString() which returns properly rendered characters
     /// (no ANSI codes, cursor artifacts, or animation overlaps).
     func getRenderedText(for sessionId: UUID, fromLine: Int) -> String {
+        lock.lock()
+        defer { lock.unlock() }
         guard let tv = views[sessionId] else { return "" }
         let terminal = tv.getTerminal()
         var lines: [String] = []
