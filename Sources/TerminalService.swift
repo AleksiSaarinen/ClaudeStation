@@ -154,22 +154,35 @@ class TerminalService {
     private func detectStatus(from text: String, session: Session?) {
         guard let session = session else { return }
 
-        // Strip ANSI for pattern matching
+        // Spinner characters = Claude is actively working
+        let spinners: [Character] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        if text.contains(where: { spinners.contains($0) }) {
+            session.status = .running
+            return
+        }
+
+        // Claude's thinking indicators
+        if text.contains("Noodling") || text.contains("Waddling") || text.contains("Harmonizing")
+            || text.contains("Pondering") || text.contains("Crunching") || text.contains("Churning") {
+            session.status = .running
+            return
+        }
+
+        // The ❯ prompt means Claude is waiting for input
+        // Only match if it's near the end of a chunk (not inside a menu)
         let clean = text.replacingOccurrences(
             of: "\u{1B}\\[[0-9;?]*[a-zA-Z]|\u{1B}\\][^\u{07}]*(\u{07}|\u{1B}\\\\)|\u{1B}[^\\[\\]].",
             with: "",
             options: .regularExpression
         )
-
-        if clean.contains("❯") {
+        let trimmed = clean.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.contains("❯") && !trimmed.contains("trust") && !trimmed.contains("Yes") {
             session.status = .waitingForInput
             if !session.messageQueue.isEmpty {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     self.processQueueIfNeeded(session: session)
                 }
             }
-        } else if text.contains("⠋") || text.contains("⠙") || text.contains("⠹") || text.contains("⠸") {
-            session.status = .running
         }
     }
 

@@ -173,13 +173,13 @@ struct InputBar: View {
     var inputFocused: FocusState<Bool>.Binding
     var onSendImmediate: () -> Void
     var onSendToQueue: () -> Void
-    
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "chevron.right")
                 .foregroundStyle(.orange)
                 .font(.system(.body, design: .monospaced).bold())
-            
+
             TextField("Message to Claude...", text: $inputText)
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
@@ -187,33 +187,29 @@ struct InputBar: View {
                 .onSubmit {
                     onSendToQueue()
                 }
-            
-            // Queue button (default action)
-            Button {
-                onSendToQueue()
-            } label: {
+
+            // Queue button (Enter)
+            Button(action: onSendToQueue) {
                 Label("Queue", systemImage: "tray.and.arrow.down")
-                    .font(.caption)
             }
             .buttonStyle(.bordered)
             .tint(.orange)
+            .controlSize(.regular)
             .help("Add to queue (Enter)")
             .keyboardShortcut(.return, modifiers: [])
-            
-            // Send immediately button
-            Button {
-                onSendImmediate()
-            } label: {
+
+            // Send Now button (Shift+Enter)
+            Button(action: onSendImmediate) {
                 Label("Send Now", systemImage: "paperplane.fill")
-                    .font(.caption)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
             .tint(.blue)
-            .help("Send immediately (⇧Enter)")
+            .controlSize(.regular)
+            .help("Send immediately (Shift+Enter)")
             .keyboardShortcut(.return, modifiers: .shift)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background(.bar)
     }
 }

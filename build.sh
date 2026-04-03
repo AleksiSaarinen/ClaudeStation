@@ -1,0 +1,55 @@
+#!/bin/bash
+set -e
+
+APP="build/ClaudeStation.app"
+BINARY="$APP/Contents/MacOS/ClaudeStation"
+IDENTITY="ClaudeStation Dev"
+
+echo "Building..."
+swift build 2>&1 | tail -3
+
+echo "Bundling..."
+mkdir -p "$APP/Contents/MacOS"
+
+# Only copy if binary actually changed
+if ! cmp -s .build/debug/ClaudeStation "$BINARY" 2>/dev/null; then
+    cp .build/debug/ClaudeStation "$BINARY"
+    echo "Binary updated."
+else
+    echo "Binary unchanged, skipping copy."
+fi
+
+# Create Info.plist if missing
+if [ ! -f "$APP/Contents/Info.plist" ]; then
+    cat > "$APP/Contents/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>ClaudeStation</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.claudestation.app</string>
+    <key>CFBundleName</key>
+    <string>ClaudeStation</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+fi
+
+echo "Signing with '$IDENTITY'..."
+codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1
+
+echo "Done! Run with: open $APP"
