@@ -43,9 +43,7 @@ class TerminalService {
 
         args.append(text)
 
-        let process = Process()
-        let pipe = Pipe()
-        let errorPipe = Pipe()
+        let workDir = (session.workingDirectory as NSString).expandingTildeInPath
 
         // Validate working directory
         if !FileManager.default.fileExists(atPath: workDir) {
@@ -58,8 +56,9 @@ class TerminalService {
             return
         }
 
-        // Build full command string and run via shell (resolves PATH)
-        let workDir = (session.workingDirectory as NSString).expandingTildeInPath
+        let process = Process()
+        let pipe = Pipe()
+        let errorPipe = Pipe()
         let escapedText = text.replacingOccurrences(of: "'", with: "'\\''")
         let claudeCmd = ([settings.claudeCodePath] + args.dropLast()).joined(separator: " ")
         let fullCmd = "cd '\(workDir)' && \(claudeCmd) '\(escapedText)'"

@@ -10,6 +10,7 @@ struct SessionDetailView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @State private var inputText: String = ""
     @State private var activeTab: DetailTab = .terminal
+    @State private var showFilePicker = false
     @StateObject private var minigameBridge = MinigameBridge()
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
@@ -79,8 +80,32 @@ struct SessionDetailView: View {
                         guard !inputText.isEmpty else { return }
                         sessionManager.queueMessage(inputText, for: session)
                         inputText = ""
+                    },
+                    onAttach: {
+                        showFilePicker = true
                     }
                 )
+                .fileImporter(
+                    isPresented: $showFilePicker,
+                    allowedContentTypes: [.image, .plainText, .sourceCode, .json, .data],
+                    allowsMultipleSelection: false
+                ) { result in
+                    if case .success(let urls) = result, let url = urls.first {
+                        if url.startAccessingSecurityScopedResource() {
+                            defer { url.stopAccessingSecurityScopedResource() }
+                            // Copy to temp location and attach
+                            let tempPath = NSTemporaryDirectory() + "claudestation_\(url.lastPathComponent)"
+                            try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: tempPath))
+                            if let image = NSImage(contentsOf: url) {
+                                pasteboardWatcher.pendingImage = image
+                                pasteboardWatcher.pendingImagePath = tempPath
+                            } else {
+                                // Non-image file — add path to input
+                                inputText += (inputText.isEmpty ? "" : "\n") + "[File: \(tempPath)]"
+                            }
+                        }
+                    }
+                }
             }
             .animation(.easeInOut(duration: 0.25), value: session.messageQueue.count)
             .animation(.easeInOut(duration: 0.2), value: pasteboardWatcher.pendingImage != nil)
@@ -100,7 +125,7 @@ struct SessionDetailView: View {
             }
             if oldStatus == .running && newStatus == .waitingForInput {
                 let duration = taskStartTime.map { Date().timeIntervalSince($0) } ?? 30
-                minigameBridge.taskCompleted(durationSeconds: duration)
+                minigameBridge.taskCompleted(durationSeconds: Int(duration))
                 taskStartTime = nil
             }
         }
@@ -225,37 +250,84 @@ struct InputBar: View {
     var hasAttachment: Bool = false
     var onSend: () -> Void
     var onForceQueue: () -> Void
+    var onAttach: () -> Void = {}
     @Environment(\.theme) var theme
+    @State private var planMode = false
 
     private var isReady: Bool {
         session.status == .waitingForInput || session.status == .idle
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(theme.promptChar)
-                .foregroundStyle(isReady ? theme.promptColor : theme.mutedText)
-                .font(theme.monoFont.bold())
+        VStack(spacing: 0) {
+            // Input field in rounded container
+            HStack(alignment: .center, spacing: 8) {
+                // Plus button for attachments
+                Button(action: onAttach) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(theme.mutedText)
+                        .frame(width: 28, height: 28)
+                        .background(theme.toolCardBg)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(theme.toolCardBorder, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help("Attach file")
 
-            TextField("Message to Claude...", text: $inputText)
-                .textFieldStyle(.plain)
-                .font(theme.monoFont)
-                .foregroundStyle(theme.assistantText)
-                .focused(inputFocused)
-                .onSubmit { onSend() }
+                // Text field
+                TextField("Message to Claude...", text: $inputText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(theme.monoFont)
+                    .foregroundStyle(theme.assistantText)
+                    .focused(inputFocused)
+                    .lineLimit(1...6)
+                    .onSubmit { onSend() }
 
-            Button(action: onSend) {
-                Image(systemName: isReady ? "paperplane.fill" : "tray.and.arrow.down")
+                // Right side buttons
+                HStack(spacing: 6) {
+                    // Plan mode toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { planMode.toggle() }
+                    } label: {
+                        Text("Plan")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(planMode ? theme.userBubbleText : theme.mutedText)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(planMode ? theme.accent : theme.toolCardBg)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(planMode ? theme.accent : theme.toolCardBorder, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Toggle plan mode")
+
+                    // Send button
+                    Button(action: onSend) {
+                        Image(systemName: isReady ? "arrow.up" : "tray.and.arrow.down")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.mutedText : .white)
+                            .frame(width: 28, height: 28)
+                            .background(inputText.isEmpty && !hasAttachment ? theme.toolCardBg : theme.accent)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(inputText.isEmpty && !hasAttachment)
+                    .help(isReady ? "Send (Enter)" : "Queue (Enter)")
+                    .keyboardShortcut(.return, modifiers: [])
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.accent)
-            .controlSize(.small)
-            .help(isReady ? "Send (Enter)" : "Queue (Enter)")
-            .keyboardShortcut(.return, modifiers: [])
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(theme.inputBg)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(theme.inputBorder, lineWidth: 1)
+            )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(theme.inputBg)
-        .overlay(Divider().frame(maxHeight: 1).background(theme.inputBorder), alignment: .top)
+        .background(theme.chatBg)
     }
 }
