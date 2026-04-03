@@ -9,9 +9,11 @@ struct ClaudeStationApp: App {
     var body: some Scene {
         // Single-instance Window — prevents URL scheme calls from spawning duplicates
         Window("ClaudeStation", id: "main") {
+            let activeTheme = Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil)
             ContentView()
                 .environmentObject(sessionManager)
-                .environment(\.theme, Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil))
+                .environment(\.theme, activeTheme)
+                .id(selectedThemeId + customMonoFont)
                 .frame(minWidth: 900, minHeight: 600)
                 .onOpenURL { url in
                     handleURL(url)
