@@ -177,7 +177,6 @@ struct AssistantMessageRow: View {
                         .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
                         .padding(.horizontal, 12)
                 } else {
                     ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
@@ -261,7 +260,6 @@ struct MarkdownText: View {
                         .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
                 }
             }
         }
@@ -357,82 +355,60 @@ struct MarkdownText: View {
     }
 }
 
-// MARK: - Selectable Text (NSTextView for easy text selection)
+// MARK: - Selectable Text (NSTextField for easy click-anywhere text selection)
 
 struct SelectableText: NSViewRepresentable {
     let text: String
     let theme: Theme
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView()
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.isRichText = false
-        textView.textContainerInset = .zero
-        textView.textContainer?.lineFragmentPadding = 0
-
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.drawsBackground = false
-        scrollView.documentView = textView
-        scrollView.autoresizingMask = [.width]
-
-        return scrollView
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(wrappingLabelWithString: "")
+        field.isEditable = false
+        field.isSelectable = true
+        field.drawsBackground = false
+        field.isBezeled = false
+        field.lineBreakMode = .byWordWrapping
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return field
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-
+    func updateNSView(_ field: NSTextField, context: Context) {
         let fontName = theme.fontMono
         let font = NSFont(name: fontName, size: 13) ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        let color = NSColor(theme.assistantText)
-
-        // Parse markdown bold/italic/code
-        let attributed = parseMarkdown(text, font: font, color: color)
-        textView.textStorage?.setAttributedString(attributed)
-
-        // Resize to fit content
-        textView.textContainer?.containerSize = NSSize(width: scrollView.bounds.width, height: .greatestFiniteMagnitude)
-        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
-        let height = textView.layoutManager?.usedRect(for: textView.textContainer!).height ?? 20
-        scrollView.frame.size.height = height + 2
-        textView.frame.size.height = height + 2
+        field.attributedStringValue = parseMarkdown(text, font: font, color: NSColor(theme.assistantText))
     }
 
     private func parseMarkdown(_ text: String, font: NSFont, color: NSColor) -> NSAttributedString {
         let result = NSMutableAttributedString(string: text, attributes: [
-            .font: font,
-            .foregroundColor: color
+            .font: font, .foregroundColor: color
         ])
 
         // Bold: **text**
-        let boldRegex = try? NSRegularExpression(pattern: "\\*\\*(.+?)\\*\\*")
-        for match in (boldRegex?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []).reversed() {
-            guard let fullRange = Range(match.range, in: text),
-                  let innerRange = Range(match.range(at: 1), in: text) else { continue }
-            let boldFont = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
-            let inner = NSAttributedString(string: String(text[innerRange]), attributes: [
-                .font: boldFont,
-                .foregroundColor: color
-            ])
-            result.replaceCharacters(in: NSRange(fullRange, in: text), with: inner)
+        if let regex = try? NSRegularExpression(pattern: "\\*\\*(.+?)\\*\\*") {
+            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+                guard let fullRange = Range(match.range, in: text),
+                      let innerRange = Range(match.range(at: 1), in: text) else { continue }
+                let boldFont = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+                let inner = NSAttributedString(string: String(text[innerRange]), attributes: [
+                    .font: boldFont, .foregroundColor: color
+                ])
+                result.replaceCharacters(in: NSRange(fullRange, in: text), with: inner)
+            }
         }
 
         // Inline code: `text`
-        let codeRegex = try? NSRegularExpression(pattern: "`([^`]+)`")
         let resultString = result.string
-        for match in (codeRegex?.matches(in: resultString, range: NSRange(resultString.startIndex..., in: resultString)) ?? []).reversed() {
-            guard let fullRange = Range(match.range, in: resultString),
-                  let innerRange = Range(match.range(at: 1), in: resultString) else { continue }
-            let codeFont = NSFont(name: theme.fontMono, size: 12) ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            let inner = NSAttributedString(string: String(resultString[innerRange]), attributes: [
-                .font: codeFont,
-                .foregroundColor: NSColor(theme.accent),
-                .backgroundColor: NSColor(theme.toolCardBg)
-            ])
-            result.replaceCharacters(in: NSRange(fullRange, in: resultString), with: inner)
+        if let regex = try? NSRegularExpression(pattern: "`([^`]+)`") {
+            for match in regex.matches(in: resultString, range: NSRange(resultString.startIndex..., in: resultString)).reversed() {
+                guard let fullRange = Range(match.range, in: resultString),
+                      let innerRange = Range(match.range(at: 1), in: resultString) else { continue }
+                let inner = NSAttributedString(string: String(resultString[innerRange]), attributes: [
+                    .font: NSFont(name: theme.fontMono, size: 12) ?? font,
+                    .foregroundColor: NSColor(theme.accent),
+                    .backgroundColor: NSColor(theme.toolCardBg)
+                ])
+                result.replaceCharacters(in: NSRange(fullRange, in: resultString), with: inner)
+            }
         }
 
         return result
