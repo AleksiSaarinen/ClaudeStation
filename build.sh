@@ -44,6 +44,8 @@ if [ ! -f "$APP/Contents/Info.plist" ]; then
     <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>ClaudeStation</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
@@ -59,6 +61,10 @@ if [ ! -f "$APP/Contents/Info.plist" ]; then
 </plist>
 PLIST
 fi
+
+# Copy icon
+mkdir -p "$APP/Contents/Resources"
+cp Resources/ClaudeStation.icns "$APP/Contents/Resources/" 2>/dev/null
 
 echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1

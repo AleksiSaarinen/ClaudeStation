@@ -229,15 +229,129 @@ struct MarkdownText: View {
     @Environment(\.theme) var theme
 
     var body: some View {
-        Text(rendered)
-            .font(theme.monoFont)
-            .foregroundStyle(theme.assistantText)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        let parts = splitCodeBlocks(text)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                if part.isCode {
+                    // Code block with syntax highlighting
+                    VStack(alignment: .leading, spacing: 0) {
+                        if !part.language.isEmpty {
+                            Text(part.language)
+                                .font(theme.monoCaption2Font)
+                                .foregroundStyle(theme.mutedText)
+                                .padding(.horizontal, 10)
+                                .padding(.top, 6)
+                        }
+                        Text(highlightSyntax(part.text))
+                            .font(theme.monoCaption2Font)
+                            .textSelection(.enabled)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .background(theme.toolCardBg)
+                    .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4)))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4))
+                            .stroke(theme.toolCardBorder, lineWidth: 1)
+                    )
+                } else {
+                    Text(renderInline(part.text))
+                        .font(theme.monoFont)
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
     }
 
-    private var rendered: AttributedString {
+    private func renderInline(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    }
+
+    private struct TextPart {
+        let text: String
+        let isCode: Bool
+        let language: String
+    }
+
+    private func splitCodeBlocks(_ text: String) -> [TextPart] {
+        var parts: [TextPart] = []
+        let lines = text.components(separatedBy: "\n")
+        var current: [String] = []
+        var inCode = false
+        var lang = ""
+
+        for line in lines {
+            if line.hasPrefix("```") && !inCode {
+                // Start code block
+                let prose = current.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !prose.isEmpty { parts.append(TextPart(text: prose, isCode: false, language: "")) }
+                current = []
+                inCode = true
+                lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("```") && inCode {
+                // End code block
+                let code = current.joined(separator: "\n")
+                parts.append(TextPart(text: code, isCode: true, language: lang))
+                current = []
+                inCode = false
+                lang = ""
+            } else {
+                current.append(line)
+            }
+        }
+
+        let remaining = current.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !remaining.isEmpty {
+            parts.append(TextPart(text: remaining, isCode: inCode, language: inCode ? lang : ""))
+        }
+        return parts
+    }
+
+    private func highlightSyntax(_ code: String) -> AttributedString {
+        var result = AttributedString(code)
+
+        let keywords = ["func", "var", "let", "if", "else", "for", "while", "return", "import",
+                        "struct", "class", "enum", "case", "switch", "guard", "self", "true", "false",
+                        "nil", "static", "private", "public", "async", "await", "try", "catch",
+                        "def", "from", "in", "const", "function", "export", "default"]
+
+        for keyword in keywords {
+            var search = result.startIndex
+            while let range = result[search...].range(of: keyword) {
+                // Check word boundaries
+                let before = range.lowerBound == result.startIndex ||
+                    !result.characters[result.index(beforeCharacter: range.lowerBound)].isLetter
+                let after = range.upperBound == result.endIndex ||
+                    !result.characters[range.upperBound].isLetter
+                if before && after {
+                    result[range].foregroundColor = NSColor(theme.accent)
+                }
+                search = range.upperBound
+            }
+        }
+
+        // Strings (simple quotes)
+        colorPattern(&result, pattern: "\"[^\"]*\"", color: NSColor(.green.opacity(0.8)))
+        // Comments
+        colorPattern(&result, pattern: "//.*$", color: NSColor(theme.mutedText))
+
+        return result
+    }
+
+    private func colorPattern(_ string: inout AttributedString, pattern: String, color: NSColor) {
+        let plain = String(string.characters)
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .anchorsMatchLines) else { return }
+        let matches = regex.matches(in: plain, range: NSRange(plain.startIndex..., in: plain))
+        for match in matches {
+            guard let swiftRange = Range(match.range, in: plain) else { continue }
+            let lower = AttributedString.Index(swiftRange.lowerBound, within: string)
+            let upper = AttributedString.Index(swiftRange.upperBound, within: string)
+            if let lower, let upper {
+                string[lower..<upper].foregroundColor = color
+            }
+        }
     }
 }
 

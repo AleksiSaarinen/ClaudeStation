@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UserNotifications
 
 /// Handles communication with Claude Code via stream-json API mode.
 /// Each user message spawns: `claude -p --output-format stream-json --verbose --resume <session>`
@@ -30,7 +31,7 @@ class TerminalService {
 
         // Build claude command
         let settings = AppSettings.shared
-        var args = ["-p", "--output-format", "stream-json", "--verbose"]
+        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
 
         if settings.alwaysBypassPermissions {
             args.append("--dangerously-skip-permissions")
@@ -157,9 +158,12 @@ class TerminalService {
                             switch blockType {
                             case "text":
                                 if let text = block["text"] as? String, !text.isEmpty {
-                                    appendBlock(.text(text), textContent: text)
-                                    DispatchQueue.main.async {
-                                        session.assistantState = .responding
+                                    // Skip if already streamed via content_block_delta
+                                    if messageIndex == nil {
+                                        appendBlock(.text(text), textContent: text)
+                                        DispatchQueue.main.async {
+                                            session.assistantState = .responding
+                                        }
                                     }
                                 }
 
@@ -206,6 +210,46 @@ class TerminalService {
                         appendBlock(.toolResult(toolUseId: toolUseId, content: resultContent))
                     }
 
+                case "stream_event":
+                    if let event = json["event"] as? [String: Any],
+                       let eventType = event["type"] as? String {
+                        if eventType == "content_block_delta",
+                           let delta = event["delta"] as? [String: Any],
+                           let deltaType = delta["type"] as? String {
+                            if deltaType == "text_delta", let text = delta["text"] as? String {
+                                // Stream text word-by-word into the live message
+                                DispatchQueue.main.async {
+                                    if let idx = messageIndex, idx < session.chatMessages.count {
+                                        // Update existing text block or create one
+                                        let blocks = session.chatMessages[idx].blocks
+                                        if let lastIdx = blocks.lastIndex(where: {
+                                            if case .text = $0.kind { return true }; return false
+                                        }) {
+                                            if case .text(let existing) = session.chatMessages[idx].blocks[lastIdx].kind {
+                                                session.chatMessages[idx].blocks[lastIdx] = ContentBlock(
+                                                    id: session.chatMessages[idx].blocks[lastIdx].id,
+                                                    kind: .text(existing + text)
+                                                )
+                                                session.chatMessages[idx].content += text
+                                            }
+                                        } else {
+                                            session.chatMessages[idx].blocks.append(.text(text))
+                                            session.chatMessages[idx].content += text
+                                        }
+                                        session.assistantState = .responding
+                                    } else {
+                                        // First content — create the message
+                                        var msg = ChatMessage(role: .assistant, content: text, blocks: [.text(text)])
+                                        msg.durationSeconds = 0
+                                        session.chatMessages.append(msg)
+                                        messageIndex = session.chatMessages.count - 1
+                                        session.assistantState = .responding
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                 case "result":
                     resultDuration = json["duration_ms"] as? Int
                     resultCost = json["total_cost_usd"] as? Double
@@ -244,6 +288,17 @@ class TerminalService {
 
             // Trigger save after response completes
             NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
+
+            // System notification if app is not focused
+            if !NSApp.isActive {
+                let content = UNMutableNotificationContent()
+                content.title = "Claude finished"
+                let preview = session.chatMessages.last?.content.prefix(80) ?? ""
+                content.body = String(preview)
+                content.sound = .default
+                let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+                UNUserNotificationCenter.current().add(request)
+            }
 
             if !session.messageQueue.isEmpty {
                 self.processNextInQueue(for: session)

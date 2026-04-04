@@ -1,8 +1,13 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct ClaudeStationApp: App {
     @StateObject private var sessionManager = SessionManager()
+
+    init() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
     @AppStorage("selectedTheme") private var selectedThemeId = "midnight"
     @AppStorage("customMonoFont") private var customMonoFont = ""
 
