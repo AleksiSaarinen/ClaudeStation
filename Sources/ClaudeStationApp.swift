@@ -1,8 +1,25 @@
 import SwiftUI
 import UserNotifications
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var sessionManager: SessionManager?
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        let newSession = NSMenuItem(title: "New Session", action: #selector(newSession), keyEquivalent: "")
+        newSession.target = self
+        menu.addItem(newSession)
+        return menu
+    }
+
+    @objc func newSession() {
+        sessionManager?.createSession()
+    }
+}
+
 @main
 struct ClaudeStationApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var sessionManager = SessionManager()
 
     init() {
@@ -17,6 +34,7 @@ struct ClaudeStationApp: App {
             let activeTheme = Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil)
             ContentView()
                 .environmentObject(sessionManager)
+                .onAppear { appDelegate.sessionManager = sessionManager }
                 .environment(\.theme, activeTheme)
                 .id(selectedThemeId + customMonoFont)
                 .frame(minWidth: 350, minHeight: 300)

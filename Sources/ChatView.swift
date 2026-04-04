@@ -155,6 +155,7 @@ struct AssistantMessageRow: View {
     let message: ChatMessage
     @Environment(\.theme) var theme
     @State private var appeared = false
+    @State private var showThinking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -186,24 +187,69 @@ struct AssistantMessageRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                 } else {
-                    ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
-                        Group {
-                            switch block.kind {
-                            case .text(let text):
-                                MarkdownText(text: text)
-                            case .toolUse(let name, _):
-                                ToolUseCard(name: name, input: block.toolInput)
-                            case .toolResult(let content):
-                                ToolResultCard(content: content)
-                            }
+                    let textBlocks = message.blocks.filter { if case .text = $0.kind { return true }; return false }
+                    let hasThinking = textBlocks.count > 1 || message.blocks.contains { if case .toolUse = $0.kind { return true }; return false }
+
+                    // "Show thinking" toggle when there's intermediate content
+                    if hasThinking && !showThinking {
+                        // Show only the last text block (the final answer)
+                        if let lastText = textBlocks.last, case .text(let text) = lastText.kind {
+                            MarkdownText(text: text)
+                                .padding(.horizontal, 12)
                         }
-                        .padding(.horizontal, 12)
-                        .opacity(appeared ? 1.0 : 0.0)
-                        .offset(y: appeared ? 0 : 6)
-                        .animation(
-                            .easeOut(duration: 0.3).delay(Double(index) * 0.06),
-                            value: appeared
-                        )
+
+                        // Expandable thinking toggle
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { showThinking = true }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                Text("Show reasoning (\(message.blocks.count - (textBlocks.isEmpty ? 0 : 1)) steps)")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(theme.mutedText)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 4)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // Show all blocks (expanded or simple response)
+                        if showThinking {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) { showThinking = false }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption2)
+                                    Text("Hide reasoning")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(theme.mutedText)
+                                .padding(.horizontal, 12)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
+                            Group {
+                                switch block.kind {
+                                case .text(let text):
+                                    MarkdownText(text: text)
+                                case .toolUse(let name, _):
+                                    ToolUseCard(name: name, input: block.toolInput)
+                                case .toolResult(let content):
+                                    ToolResultCard(content: content)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .opacity(appeared ? 1.0 : 0.0)
+                            .offset(y: appeared ? 0 : 6)
+                            .animation(
+                                .easeOut(duration: 0.3).delay(Double(index) * 0.06),
+                                value: appeared
+                            )
+                        }
                     }
                 }
             }
