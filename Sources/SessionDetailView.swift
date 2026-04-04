@@ -11,6 +11,7 @@ struct SessionDetailView: View {
     @State private var inputText: String = ""
     @State private var activeTab: DetailTab = .terminal
     @State private var showFilePicker = false
+    @State private var isDragOver = false
     @StateObject private var minigameBridge = MinigameBridge()
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
@@ -20,8 +21,6 @@ struct SessionDetailView: View {
         VStack(spacing: 0) {
             // Session header bar with tab switcher
             SessionHeaderBar(session: session, activeTab: $activeTab)
-
-            Divider()
 
             VStack(spacing: 0) {
                 ZStack {
@@ -35,8 +34,6 @@ struct SessionDetailView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture { inputFocused = true }
-
-                Divider()
 
                 // Inline queue strip (only visible when messages are queued)
                 if !session.messageQueue.isEmpty {
@@ -109,6 +106,40 @@ struct SessionDetailView: View {
             }
             .animation(.easeInOut(duration: 0.25), value: session.messageQueue.count)
             .animation(.easeInOut(duration: 0.2), value: pasteboardWatcher.pendingImage != nil)
+            .overlay {
+                if isDragOver {
+                    DropOverlay()
+                        .transition(.opacity)
+                }
+            }
+            .onDrop(of: [.image, .fileURL], isTargeted: $isDragOver) { providers in
+                for provider in providers {
+                    provider.loadObject(ofClass: NSImage.self) { image, _ in
+                        guard let image = image as? NSImage else { return }
+                        let path = NSTemporaryDirectory() + "claudestation_drop_\(Int(Date().timeIntervalSince1970)).png"
+                        if let tiff = image.tiffRepresentation,
+                           let bmp = NSBitmapImageRep(data: tiff),
+                           let png = bmp.representation(using: .png, properties: [:]) {
+                            try? png.write(to: URL(fileURLWithPath: path))
+                            DispatchQueue.main.async {
+                                self.pasteboardWatcher.pendingImage = image
+                                self.pasteboardWatcher.pendingImagePath = path
+                            }
+                        }
+                    }
+                    provider.loadObject(ofClass: URL.self) { url, _ in
+                        guard let url = url, let image = NSImage(contentsOf: url) else { return }
+                        let path = NSTemporaryDirectory() + "claudestation_drop_\(url.lastPathComponent)"
+                        try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: path))
+                        DispatchQueue.main.async {
+                            self.pasteboardWatcher.pendingImage = image
+                            self.pasteboardWatcher.pendingImagePath = path
+                        }
+                    }
+                }
+                return true
+            }
+            .animation(.easeInOut(duration: 0.2), value: isDragOver)
         }
         .onAppear {
             inputFocused = true
@@ -129,6 +160,7 @@ struct SessionDetailView: View {
                 taskStartTime = nil
             }
         }
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 SettingsLink {
@@ -190,7 +222,7 @@ struct SessionHeaderBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
-        .background(theme.chromeBar)
+        .background(theme.chatBg)
         .animation(.easeInOut(duration: 0.3), value: session.status)
     }
 }
@@ -201,45 +233,103 @@ struct SessionHeaderBar: View {
 
 // MARK: - Attachment Preview
 
+// MARK: - Drop Overlay
+
+struct DropOverlay: View {
+    @Environment(\.theme) var theme
+
+    var body: some View {
+        ZStack {
+            theme.chatBg.opacity(0.85)
+
+            VStack(spacing: 12) {
+                Image(systemName: "arrow.down.doc")
+                    .font(.system(size: 36))
+                    .foregroundStyle(theme.accent)
+
+                Text("Drop your files here")
+                    .font(.headline)
+                    .foregroundStyle(theme.assistantText)
+
+                Text("Drop files to add them to your conversation")
+                    .font(.caption)
+                    .foregroundStyle(theme.mutedText)
+            }
+            .padding(40)
+            .background(theme.assistantBubble)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(theme.accent.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8]))
+            )
+        }
+    }
+}
+
+// MARK: - Attachment Preview
+
 struct AttachmentPreview: View {
     let image: NSImage
     var onRemove: () -> Void
     @Environment(\.theme) var theme
+    @State private var showFullPreview = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(height: 52)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(theme.chromeBorder, lineWidth: 1)
-                )
+        HStack {
+            ZStack(alignment: .topTrailing) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(theme.chromeBorder, lineWidth: 1)
+                    )
+                    .onTapGesture { showFullPreview = true }
+                    .cursor(.pointingHand)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Screenshot")
-                    .font(.caption.bold())
-                    .foregroundStyle(theme.chromeText)
-                Text("\(Int(image.size.width))x\(Int(image.size.height))")
-                    .font(.caption2)
-                    .foregroundStyle(theme.mutedText)
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white)
+                        .background(Circle().fill(.black.opacity(0.6)).frame(width: 14, height: 14))
+                }
+                .buttonStyle(.plain)
+                .offset(x: 6, y: -6)
             }
-
             Spacer()
-
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(theme.mutedText)
-            }
-            .buttonStyle(.borderless)
-            .help("Remove attachment")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(theme.chromeBar)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .sheet(isPresented: $showFullPreview) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("\(Int(image.size.width)) x \(Int(image.size.height))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Done") { showFullPreview = false }
+                        .keyboardShortcut(.escape, modifiers: [])
+                }
+                .padding(12)
+
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 800, maxHeight: 600)
+                    .padding(.bottom, 12)
+            }
+            .frame(minWidth: 400, minHeight: 300)
+        }
+    }
+}
+
+extension View {
+    func cursor(_ cursor: NSCursor) -> some View {
+        onHover { inside in
+            if inside { cursor.push() } else { NSCursor.pop() }
+        }
     }
 }
 

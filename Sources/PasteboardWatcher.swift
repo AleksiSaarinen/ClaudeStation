@@ -16,7 +16,7 @@ class PasteboardWatcher: ObservableObject {
     func startWatching() {
         lastChangeCount = NSPasteboard.general.changeCount
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             self?.checkPasteboard()
         }
     }
@@ -29,19 +29,35 @@ class PasteboardWatcher: ObservableObject {
     private func checkPasteboard() {
         let pb = NSPasteboard.general
         guard pb.changeCount != lastChangeCount else { return }
-        let oldCount = lastChangeCount
         lastChangeCount = pb.changeCount
 
-        // Only trigger if pasteboard has image data (not just text)
-        guard pb.types?.contains(.png) == true
-           || pb.types?.contains(.tiff) == true
-           || pb.types?.contains(NSPasteboard.PasteboardType("public.image")) == true
-        else { return }
+        // Check for image data directly
+        let hasImage = pb.types?.contains(.png) == true
+            || pb.types?.contains(.tiff) == true
+            || pb.types?.contains(NSPasteboard.PasteboardType("public.image")) == true
 
-        // Don't trigger if we just cleared our own image
-        guard oldCount != lastChangeCount else { return }
+        // Check for file URLs that are images (macOS screenshots)
+        let hasImageFile: Bool = {
+            guard let urls = pb.readObjects(forClasses: [NSURL.self], options: [
+                .urlReadingContentsConformToTypes: ["public.image"]
+            ]) as? [URL], !urls.isEmpty else { return false }
+            return true
+        }()
 
-        guard let image = NSImage(pasteboard: pb), image.size.width > 10 else { return }
+        guard hasImage || hasImageFile else { return }
+
+        // Try loading image from pasteboard data or file URL
+        var image: NSImage?
+        if hasImage {
+            image = NSImage(pasteboard: pb)
+        }
+        if image == nil, let urls = pb.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingContentsConformToTypes: ["public.image"]
+        ]) as? [URL], let url = urls.first {
+            image = NSImage(contentsOf: url)
+        }
+
+        guard let image, image.size.width > 10 else { return }
 
         // Save to temp file
         let filename = "claudestation_\(Int(Date().timeIntervalSince1970)).png"
