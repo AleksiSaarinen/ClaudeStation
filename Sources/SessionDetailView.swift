@@ -23,84 +23,77 @@ struct SessionDetailView: View {
             // Session header bar with tab switcher
             SessionHeaderBar(session: session, activeTab: $activeTab)
 
-            VStack(spacing: 0) {
-                ChatView(session: session)
-                    .contentShape(Rectangle())
-                    .onTapGesture { inputFocused = true }
+            ChatView(session: session)
+                .contentShape(Rectangle())
+                .onTapGesture { inputFocused = true }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        // Inline queue strip (only visible when messages are queued)
+                        if !session.messageQueue.isEmpty {
+                            InlineQueueStrip(session: session)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
 
-                // Inline queue strip (only visible when messages are queued)
-                if !session.messageQueue.isEmpty {
-                    InlineQueueStrip(session: session)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
-                // Input bar
-                InputBar(
-                    inputText: $inputText,
-                    inputFocused: $inputFocused,
-                    session: session,
-                    attachedImage: pasteboardWatcher.pendingImage,
-                    hasAttachment: pasteboardWatcher.pendingImagePath != nil,
-                    onRemoveAttachment: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            pasteboardWatcher.clear()
-                        }
-                    },
-                    onSend: {
-                        guard !inputText.isEmpty || pasteboardWatcher.pendingImagePath != nil else { return }
-                        var message = inputText
-                        if let path = pasteboardWatcher.pendingImagePath {
-                            let prefix = message.isEmpty ? "" : "\n"
-                            message += "\(prefix)[Image: \(path)]"
-                            pasteboardWatcher.clearForSend() // keep the file — Claude needs to read it
-                        }
-                        if session.status == .waitingForInput || session.status == .idle {
-                            sessionManager.sendImmediately(message, to: session)
-                        } else {
-                            sessionManager.queueMessage(message, for: session)
-                        }
-                        inputText = ""
-                    },
-                    onForceQueue: {
-                        guard !inputText.isEmpty else { return }
-                        sessionManager.queueMessage(inputText, for: session)
-                        inputText = ""
-                    },
-                    onAttach: {
-                        showFilePicker = true
-                    },
-                    showImagePreview: $showImagePreview
-                )
-                .fileImporter(
-                    isPresented: $showFilePicker,
-                    allowedContentTypes: [.image, .plainText, .sourceCode, .json, .data],
-                    allowsMultipleSelection: false
-                ) { result in
-                    if case .success(let urls) = result, let url = urls.first {
-                        if url.startAccessingSecurityScopedResource() {
-                            defer { url.stopAccessingSecurityScopedResource() }
-                            // Copy to temp location and attach
-                            let tempPath = NSTemporaryDirectory() + "claudestation_\(url.lastPathComponent)"
-                            try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: tempPath))
-                            if let image = NSImage(contentsOf: url) {
-                                pasteboardWatcher.pendingImage = image
-                                pasteboardWatcher.pendingImagePath = tempPath
-                            } else {
-                                // Non-image file — add path to input
-                                inputText += (inputText.isEmpty ? "" : "\n") + "[File: \(tempPath)]"
+                        // Input bar
+                        InputBar(
+                            inputText: $inputText,
+                            inputFocused: $inputFocused,
+                            session: session,
+                            attachedImage: pasteboardWatcher.pendingImage,
+                            hasAttachment: pasteboardWatcher.pendingImagePath != nil,
+                            onRemoveAttachment: {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    pasteboardWatcher.clear()
+                                }
+                            },
+                            onSend: {
+                                guard !inputText.isEmpty || pasteboardWatcher.pendingImagePath != nil else { return }
+                                var message = inputText
+                                if let path = pasteboardWatcher.pendingImagePath {
+                                    let prefix = message.isEmpty ? "" : "\n"
+                                    message += "\(prefix)[Image: \(path)]"
+                                    pasteboardWatcher.clearForSend()
+                                }
+                                if session.status == .waitingForInput || session.status == .idle {
+                                    sessionManager.sendImmediately(message, to: session)
+                                } else {
+                                    sessionManager.queueMessage(message, for: session)
+                                }
+                                inputText = ""
+                            },
+                            onForceQueue: {
+                                guard !inputText.isEmpty else { return }
+                                sessionManager.queueMessage(inputText, for: session)
+                                inputText = ""
+                            },
+                            onAttach: {
+                                showFilePicker = true
+                            },
+                            showImagePreview: $showImagePreview
+                        )
+                        .fileImporter(
+                            isPresented: $showFilePicker,
+                            allowedContentTypes: [.image, .plainText, .sourceCode, .json, .data],
+                            allowsMultipleSelection: false
+                        ) { result in
+                            if case .success(let urls) = result, let url = urls.first {
+                                if url.startAccessingSecurityScopedResource() {
+                                    defer { url.stopAccessingSecurityScopedResource() }
+                                    let tempPath = NSTemporaryDirectory() + "claudestation_\(url.lastPathComponent)"
+                                    try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: tempPath))
+                                    if let image = NSImage(contentsOf: url) {
+                                        pasteboardWatcher.pendingImage = image
+                                        pasteboardWatcher.pendingImagePath = tempPath
+                                    } else {
+                                        inputText += (inputText.isEmpty ? "" : "\n") + "[File: \(tempPath)]"
+                                    }
+                                }
                             }
                         }
                     }
+                    .animation(.easeInOut(duration: 0.25), value: session.messageQueue.count)
+                    .animation(.easeInOut(duration: 0.2), value: pasteboardWatcher.pendingImage != nil)
                 }
-            }
-            .animation(.easeInOut(duration: 0.25), value: session.messageQueue.count)
-            .animation(.easeInOut(duration: 0.2), value: pasteboardWatcher.pendingImage != nil)
-            .onChange(of: inputText) { _, _ in
-                // When the input bar resizes (multi-line), keep chat pinned to bottom
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    NotificationCenter.default.post(name: .init("ScrollToBottomIfNeeded"), object: nil)
-                }
-            }
             .overlay {
                 if isDragOver {
                     DropOverlay()
