@@ -73,6 +73,7 @@ struct PetView: View {
     @Environment(\.theme) var theme
 
     @State private var currentState: PetState = .idle
+    @State private var previousStatus: SessionStatus = .idle
     @State private var currentFrame = 0
     @State private var timer: Timer?
     @State private var idleSince = Date()
@@ -128,11 +129,21 @@ struct PetView: View {
             idleSince = Date()
 
         case .waitingForInput:
-            newState = Date().timeIntervalSince(idleSince) > 120 ? .sleepy : .idle
+            // Play success animation when transitioning from running to waiting
+            if previousStatus == .running && currentState != .success {
+                newState = .success
+            } else if currentState == .success {
+                // Already playing success, let it finish
+                return
+            } else {
+                newState = Date().timeIntervalSince(idleSince) > 120 ? .sleepy : .idle
+            }
 
         case .error: newState = .error
         case .idle: newState = .idle
         }
+
+        previousStatus = session.status
 
         if newState != currentState {
             currentState = newState

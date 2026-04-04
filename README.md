@@ -1,82 +1,84 @@
 # ClaudeStation
 
-A lightweight native macOS app for managing multiple Claude Code sessions with a message queue system.
+A native macOS app for managing Claude Code sessions with a chat UI, message queue, and pixel pet companion.
 
 ## Features
 
-- **Multi-session tabs** — Run 2+ Claude Code instances side by side with a sidebar for quick switching (Cmd+1/2/3...)
-- **Message queue** — Type messages while Claude is busy. They queue up and auto-send when Claude is ready. Option to send immediately if needed.
-- **Bypass permissions always on** — `--dangerously-skip-permissions` enabled by default (configurable)
-- **Launch profiles** — Save preset configurations (directory + flags) for your projects
-- **Status detection** — Visual indicators showing if each session is idle, running, or waiting for input
-- **Queue management** — Reorder, delete, or force-send queued messages. Clear all with one click.
+- **Chat UI** — Structured responses with tool use cards, markdown rendering, syntax highlighting, and collapsible reasoning
+- **Stream-JSON API** — Uses `claude -p --output-format stream-json` for clean structured responses with word-by-word streaming
+- **Message Queue** — Type messages while Claude is working; they auto-send when ready
+- **Multi-Session Tabs** — Chrome-style tab bar, Cmd+T for new sessions, double-click to rename
+- **Command Palette** — Cmd+K to search actions, switch sessions, change directory
+- **8 Themes** — Midnight, Aurora, Rosé, Paper, Phosphor, Deep Sea, Amber, Sakura
+- **Font Picker** — Choose from 10 monospace fonts (Menlo, JetBrains Mono, Fira Code, etc.)
+- **Pixel Pet** — Animated companion that reacts to Claude's activity (coding, reading, thinking, success, error)
+- **Drag & Drop Images** — Drop screenshots or files onto the window to attach
+- **Session Persistence** — Chat history and sessions survive app restarts
+- **Notifications** — macOS notification when Claude finishes and app is in background
+- **Plan Mode** — Toggle to use `--permission-mode plan`
+- **Custom App Icon** — Purple terminal prompt icon
 
-## Architecture
+## Requirements
 
-```
-ClaudeStation/
-├── ClaudeStationApp.swift       # App entry point, window + commands
-├── Models/
-│   ├── Session.swift            # Session data model + QueuedMessage
-│   └── AppSettings.swift        # Persisted preferences + LaunchProfile
-├── Services/
-│   ├── SessionManager.swift     # Session lifecycle, queue processing
-│   └── TerminalService.swift    # PTY process spawning, I/O, status detection
-└── Views/
-    ├── ContentView.swift        # Root layout: sidebar + detail
-    ├── SessionDetailView.swift  # Terminal output + input bar + toolbar
-    ├── MessageQueuePanel.swift  # Queue panel with reorder/delete/send
-    └── SettingsAndProfiles.swift # Preferences + launch profile management
-```
+- macOS 14+ (Sonoma)
+- [Claude Code CLI](https://claude.ai/code) installed
+- Swift 5.9+
 
-## How the Queue Works
+## Build & Run
 
-1. **Enter sends to queue** — Your default action queues the message
-2. **Shift+Enter sends immediately** — Bypass the queue when you need to
-3. **Auto-processing** — When Claude finishes and shows its prompt (`❯`), the next queued message sends automatically
-4. **Manual control** — "Send Next" button to manually trigger, or "Send Now" on any individual message
-5. **Reorderable** — Drag messages in the queue to change priority
-
-## Building
-
-### Option A: Xcode
-Open `ClaudeStation.xcodeproj` in Xcode and build/run (Cmd+R).
-
-### Option B: Swift Package Manager
 ```bash
+git clone https://github.com/AleksiSaarinen/ClaudeStation.git
 cd ClaudeStation
-swift build
-swift run
+bash build.sh
+open build/ClaudeStation.app
 ```
-
-> Requires macOS 14+ and Swift 5.9+
-
-## Configuration
-
-Go to **Settings** (Cmd+,) to configure:
-- Path to `claude` binary (default: `/usr/local/bin/claude`)
-- Default working directory
-- Toggle bypass permissions
-- Queue auto-processing behavior
-- Output buffer size
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
+| Enter | Send message (or queue if busy) |
 | Cmd+T | New session |
-| Cmd+1-9 | Switch to session |
-| Enter | Queue message |
-| Shift+Enter | Send immediately |
+| Cmd+K | Command palette |
+| Cmd+1-9 | Switch to session by index |
 | Cmd+, | Settings |
 
-## TODO / Future Ideas
+## Architecture
 
-- [ ] True PTY integration with `forkpty()` for full terminal emulation (ANSI colors, cursor movement)
-- [ ] SwiftTerm or similar library for proper terminal rendering
-- [ ] Drag-and-drop file paths into the input bar
-- [ ] Session output search (Cmd+F within terminal)
-- [ ] Token/cost tracking per session
-- [ ] Export session logs
-- [ ] Touch Bar / Menu Bar quick actions
-- [ ] Notification Center alerts when a session needs attention
+```
+Sources/
+├── ClaudeStationApp.swift    # App entry, window, URL scheme, dock menu
+├── ContentView.swift         # Chrome-style tab bar + session switching
+├── SessionDetailView.swift   # Chat area, input bar, attachments
+├── ChatView.swift            # Message rendering, markdown, syntax highlighting
+├── ChatMessage.swift         # Message/block models (Codable for persistence)
+├── Session.swift             # Session model
+├── SessionManager.swift      # Session lifecycle, queue, persistence
+├── TerminalService.swift     # claude CLI communication via stream-json
+├── Theme.swift               # 8 themes + font system
+├── PetView.swift             # Animated pixel pet (clawd sprite frames)
+├── CommandPalette.swift      # Cmd+K action search
+├── PasteboardWatcher.swift   # Screenshot/clipboard detection
+├── SessionPersistence.swift  # JSON save/restore
+├── SettingsView.swift        # Theme picker, font picker, profiles
+└── MessageQueuePanel.swift   # Inline queue strip
+```
+
+## How It Works
+
+Instead of parsing raw terminal output, ClaudeStation uses Claude Code's structured API:
+
+```bash
+claude -p --output-format stream-json --verbose --include-partial-messages --resume <session_id> 'message'
+```
+
+Each response comes as clean JSON events:
+- `system` — session ID for multi-turn conversations
+- `stream_event` — word-by-word text streaming
+- `assistant` — structured content blocks (text, tool_use)
+- `tool_result` — tool output
+- `result` — duration, cost
+
+## License
+
+MIT
