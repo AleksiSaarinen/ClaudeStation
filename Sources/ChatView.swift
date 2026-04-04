@@ -399,18 +399,12 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    // Fade-in effect on the last prose part during streaming
-                    let isLastPart = idx == parts.count - 1
-                    if isStreaming && isLastPart {
-                        FadingInlineText(text: part.text, theme: theme, renderInline: renderInline)
-                    } else {
-                        Text(renderInline(part.text))
-                            .foregroundStyle(theme.assistantText)
-                            .textSelection(.enabled)
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    Text(renderInline(part.text))
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -682,45 +676,6 @@ struct ToolResultCard: View {
                     .stroke(theme.toolCardBorder, lineWidth: 1)
             )
         }
-    }
-}
-
-// MARK: - Fading Inline Text (streaming reveal effect)
-
-struct FadingInlineText: View {
-    let text: String
-    let theme: Theme
-    let renderInline: (String) -> AttributedString
-    @State private var stableText = ""
-    @State private var newText = ""
-    @State private var newOpacity: Double = 1.0
-
-    var body: some View {
-        (Text(renderInline(stableText)).foregroundStyle(theme.assistantText) +
-         Text(renderInline(newText)).foregroundStyle(theme.assistantText.opacity(newOpacity)))
-            .textSelection(.enabled)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onChange(of: text) { oldVal, newVal in
-                if newVal.count > oldVal.count {
-                    // Move previous new text into stable
-                    stableText = oldVal
-                    newText = String(newVal.dropFirst(oldVal.count))
-                    newOpacity = 0.0
-                    withAnimation(.easeIn(duration: 0.2)) {
-                        newOpacity = 1.0
-                    }
-                } else {
-                    // Text was replaced (not appended) — show all
-                    stableText = newVal
-                    newText = ""
-                    newOpacity = 1.0
-                }
-            }
-            .onAppear {
-                stableText = text
-            }
     }
 }
 
