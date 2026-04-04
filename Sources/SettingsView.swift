@@ -161,7 +161,7 @@ struct ThemeSwatch: View {
             }
             .padding(8)
             .frame(height: 90)
-            .background(theme.chatBg)
+            .background(theme.chatBackground)
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             // Label

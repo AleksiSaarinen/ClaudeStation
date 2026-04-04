@@ -54,7 +54,7 @@ struct ChatView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: session.chatMessages.count)
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
-            .background(theme.chatBg)
+            .background(theme.chatBackground)
             .onAppear {
                 // Repeated scroll — LazyVStack lays out progressively
                 for delay in [0.05, 0.15, 0.3, 0.6, 1.0, 1.5] {

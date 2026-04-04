@@ -6,6 +6,7 @@ struct Theme: Identifiable, Equatable {
 
     // Chat
     let chatBg: Color
+    let chatBgGradientEnd: Color?  // If set, chatBg → chatBgGradientEnd vertical gradient
     let userBubble: Color
     let userBubbleText: Color
     let assistantBubble: Color
@@ -43,6 +44,15 @@ struct Theme: Identifiable, Equatable {
     let borderRadius: CGFloat
 
     static func == (lhs: Theme, rhs: Theme) -> Bool { lhs.id == rhs.id }
+
+    /// Background view — gradient if configured, solid color otherwise
+    @ViewBuilder var chatBackground: some View {
+        if let end = chatBgGradientEnd {
+            LinearGradient(colors: [chatBg, end], startPoint: .top, endPoint: .bottom)
+        } else {
+            chatBg
+        }
+    }
 }
 
 // MARK: - Color from Hex
@@ -64,7 +74,7 @@ extension Color {
 extension Theme {
     static let midnight = Theme(
         id: "midnight", name: "Midnight",
-        chatBg: Color(hex: "#13131F"),
+        chatBg: Color(hex: "#13131F"), chatBgGradientEnd: Color(hex: "#1a1a2e"),
         userBubble: Color(hex: "#7B6FDE"), userBubbleText: .white,
         assistantBubble: Color(hex: "#1C1C2E"), assistantBubbleBorder: Color(hex: "#2D2D44"), assistantText: Color(hex: "#E0E0F0"),
         toolCardBg: Color(hex: "#161625"), toolCardBorder: Color(hex: "#2D2D44"), toolCardText: Color(hex: "#A0A0C0"),
@@ -79,7 +89,7 @@ extension Theme {
 
     static let aurora = Theme(
         id: "aurora", name: "Aurora",
-        chatBg: Color(hex: "#242933"),
+        chatBg: Color(hex: "#242933"), chatBgGradientEnd: Color(hex: "#1a2333"),
         userBubble: Color(hex: "#88C0D0"), userBubbleText: Color(hex: "#2E3440"),
         assistantBubble: Color(hex: "#2E3440"), assistantBubbleBorder: Color(hex: "#3B4252"), assistantText: Color(hex: "#D8DEE9"),
         toolCardBg: Color(hex: "#272D38"), toolCardBorder: Color(hex: "#3B4252"), toolCardText: Color(hex: "#81A1C1"),
@@ -94,7 +104,7 @@ extension Theme {
 
     static let rose = Theme(
         id: "rose", name: "Rosé",
-        chatBg: Color(hex: "#191724"),
+        chatBg: Color(hex: "#191724"), chatBgGradientEnd: Color(hex: "#1a1520"),
         userBubble: Color(hex: "#EB6F92"), userBubbleText: .white,
         assistantBubble: Color(hex: "#1F1D2E"), assistantBubbleBorder: Color(hex: "#2A2740"), assistantText: Color(hex: "#E0DEF4"),
         toolCardBg: Color(hex: "#1A1826"), toolCardBorder: Color(hex: "#2A2740"), toolCardText: Color(hex: "#908CAA"),
@@ -109,7 +119,7 @@ extension Theme {
 
     static let paper = Theme(
         id: "paper", name: "Paper",
-        chatBg: Color(hex: "#FAF8F4"),
+        chatBg: Color(hex: "#FAF8F4"), chatBgGradientEnd: nil,
         userBubble: Color(hex: "#C0593A"), userBubbleText: .white,
         assistantBubble: Color(hex: "#F0ECE4"), assistantBubbleBorder: Color(hex: "#E0DAD0"), assistantText: Color(hex: "#3D3830"),
         toolCardBg: Color(hex: "#F5F1EB"), toolCardBorder: Color(hex: "#E0DAD0"), toolCardText: Color(hex: "#6B6258"),
@@ -124,7 +134,7 @@ extension Theme {
 
     static let phosphor = Theme(
         id: "phosphor", name: "Phosphor",
-        chatBg: Color(hex: "#0C0C0C"),
+        chatBg: Color(hex: "#0C0C0C"), chatBgGradientEnd: Color(hex: "#001a00"),
         userBubble: Color(hex: "#1A6B1A"), userBubbleText: Color(hex: "#33FF33"),
         assistantBubble: Color(hex: "#0A120A"), assistantBubbleBorder: Color(hex: "#1A2E1A"), assistantText: Color(hex: "#33FF33"),
         toolCardBg: Color(hex: "#0E140E"), toolCardBorder: Color(hex: "#1A2E1A"), toolCardText: Color(hex: "#33FF33"),
@@ -154,7 +164,7 @@ extension Theme {
 
     static let amber = Theme(
         id: "amber", name: "Amber",
-        chatBg: Color(hex: "#140F0A"),
+        chatBg: Color(hex: "#140F0A"), chatBgGradientEnd: Color(hex: "#0a0805"),
         userBubble: Color(hex: "#3D2A0A"), userBubbleText: Color(hex: "#FFB347"),
         assistantBubble: Color(hex: "#1A1410"), assistantBubbleBorder: Color(hex: "#2E2418"), assistantText: Color(hex: "#FFB347"),
         toolCardBg: Color(hex: "#161110"), toolCardBorder: Color(hex: "#2E2418"), toolCardText: Color(hex: "#FFB347"),
@@ -169,7 +179,7 @@ extension Theme {
 
     static let sakura = Theme(
         id: "sakura", name: "Sakura",
-        chatBg: Color(hex: "#FDF6F6"),
+        chatBg: Color(hex: "#FDF6F6"), chatBgGradientEnd: nil,
         userBubble: Color(hex: "#D4728C"), userBubbleText: .white,
         assistantBubble: Color(hex: "#F5ECEC"), assistantBubbleBorder: Color(hex: "#E8D8D8"), assistantText: Color(hex: "#4A3535"),
         toolCardBg: Color(hex: "#F8F0F0"), toolCardBorder: Color(hex: "#E8D8D8"), toolCardText: Color(hex: "#8A6070"),
@@ -191,7 +201,7 @@ extension Theme {
     /// Create a copy with custom fonts
     func withFonts(mono: String?, ui: String?) -> Theme {
         Theme(
-            id: id, name: name, chatBg: chatBg,
+            id: id, name: name, chatBg: chatBg, chatBgGradientEnd: chatBgGradientEnd,
             userBubble: userBubble, userBubbleText: userBubbleText,
             assistantBubble: assistantBubble, assistantBubbleBorder: assistantBubbleBorder, assistantText: assistantText,
             toolCardBg: toolCardBg, toolCardBorder: toolCardBorder, toolCardText: toolCardText,

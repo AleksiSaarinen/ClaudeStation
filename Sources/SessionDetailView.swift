@@ -266,7 +266,7 @@ struct SessionHeaderBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
-        .background(theme.chatBg)
+        .background(theme.chatBackground)
         .animation(.easeInOut(duration: 0.3), value: session.status)
     }
 }
@@ -503,6 +503,6 @@ struct InputBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(theme.chatBg)
+        .background(theme.chatBackground)
     }
 }
