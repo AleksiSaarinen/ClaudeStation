@@ -387,7 +387,6 @@ struct MarkdownText: View {
                     )
                 } else {
                     Text(renderInline(part.text))
-                        .font(theme.monoFont)
                         .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
                         .lineLimit(nil)
@@ -400,7 +399,18 @@ struct MarkdownText: View {
     }
 
     private func renderInline(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        // Set the base font on the entire string — bold runs get the bold variant automatically
+        let baseFont = theme.resolvedNSFont(size: 13)
+        for run in result.runs {
+            let isBold = result[run.range].inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false
+            if isBold {
+                result[run.range].font = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
+            } else {
+                result[run.range].font = baseFont
+            }
+        }
+        return result
     }
 
     private struct TextPart {
