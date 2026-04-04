@@ -19,7 +19,7 @@ struct ContentView: View {
                 TabBar(draggingSessionId: $draggingSessionId)
 
                 // Content area — also a drop target for tear-off
-                Group {
+                ZStack {
                     if let session = sessionManager.activeSession {
                         SessionDetailView(session: session)
                             .id(session.id)
@@ -31,19 +31,26 @@ struct ContentView: View {
                             Spacer()
                         }
                     }
-                }
-                .onDrop(of: [.plainText], isTargeted: $tearOffTargeted) { providers in
-                    guard let sessionId = draggingSessionId,
-                          sessionManager.tabBarSessions.count > 1 else {
-                        draggingSessionId = nil
-                        return false
+
+                    // Tear-off drop zone — transparent overlay that catches tab drags
+                    // This sits above SessionDetailView so its onDrop fires first for .plainText
+                    if draggingSessionId != nil {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onDrop(of: [.plainText], isTargeted: $tearOffTargeted) { _ in
+                                guard let sessionId = draggingSessionId,
+                                      sessionManager.tabBarSessions.count > 1 else {
+                                    draggingSessionId = nil
+                                    return false
+                                }
+                                sessionManager.detachSession(sessionId)
+                                openWindow(id: "detached-session", value: sessionId)
+                                draggingSessionId = nil
+                                return true
+                            }
                     }
-                    sessionManager.detachSession(sessionId)
-                    openWindow(id: "detached-session", value: sessionId)
-                    draggingSessionId = nil
-                    return true
-                }
-                .overlay {
+
+                    // Tear-off indicator
                     if tearOffTargeted && draggingSessionId != nil && sessionManager.tabBarSessions.count > 1 {
                         VStack {
                             HStack(spacing: 6) {
@@ -74,6 +81,32 @@ struct ContentView: View {
         .keyboardShortcut(KeyEquivalent("k"), modifiers: .command, action: {
             showCommandPalette.toggle()
         })
+        .onChange(of: draggingSessionId) { _, newValue in
+            if newValue != nil { pollForDragEnd() }
+        }
+    }
+}
+
+extension ContentView {
+    /// Poll during a tab drag to detect when the mouse is released outside the window.
+    /// If the drag ends outside the window, tear off the tab into a new window.
+    func pollForDragEnd() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard let sessionId = draggingSessionId else { return }
+            if NSEvent.pressedMouseButtons == 0 {
+                // Mouse released — drag ended without any drop delegate handling it
+                draggingSessionId = nil
+                if let window = NSApp.keyWindow {
+                    let mouse = NSEvent.mouseLocation
+                    if !window.frame.contains(mouse) && sessionManager.tabBarSessions.count > 1 {
+                        sessionManager.detachSession(sessionId)
+                        openWindow(id: "detached-session", value: sessionId)
+                    }
+                }
+            } else {
+                pollForDragEnd() // still dragging — check again
+            }
+        }
     }
 }
 
