@@ -81,11 +81,11 @@ struct ChatView: View {
                 throttledScroll(proxy: proxy, force: true)
             }
             .onChange(of: lastMessageContent) { _, _ in
-                // Streaming content — only scroll if at bottom, throttled
-                throttledScroll(proxy: proxy, force: false)
+                // Streaming content — always scroll (throttled prevents flicker)
+                throttledScroll(proxy: proxy, force: true)
             }
             .onChange(of: session.assistantState) { _, _ in
-                throttledScroll(proxy: proxy, force: false)
+                throttledScroll(proxy: proxy, force: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
                 proxy.scrollTo("bottom")
