@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 import UserNotifications
 
 /// Handles communication with Claude Code via stream-json API mode.
@@ -105,6 +106,7 @@ class TerminalService {
         let handle = pipe.fileHandleForReading
         var buffer = Data()
         var messageIndex: Int?       // Index of the live assistant message
+        var currentBlockIdx: Int?    // Index of current streaming text block within the message
         var resultDuration: Int?
         var resultCost: Double?
 
@@ -213,40 +215,49 @@ class TerminalService {
                 case "stream_event":
                     if let event = json["event"] as? [String: Any],
                        let eventType = event["type"] as? String {
-                        if eventType == "content_block_delta",
-                           let delta = event["delta"] as? [String: Any],
-                           let deltaType = delta["type"] as? String {
-                            if deltaType == "text_delta", let text = delta["text"] as? String {
-                                // Stream text word-by-word into the live message
+
+                        // New content block starting — create a fresh block
+                        if eventType == "content_block_start" {
+                            if let block = event["content_block"] as? [String: Any],
+                               let blockType = block["type"] as? String, blockType == "text" {
                                 DispatchQueue.main.async {
                                     if let idx = messageIndex, idx < session.chatMessages.count {
-                                        // Update existing text block or create one
-                                        let blocks = session.chatMessages[idx].blocks
-                                        if let lastIdx = blocks.lastIndex(where: {
-                                            if case .text = $0.kind { return true }; return false
-                                        }) {
-                                            if case .text(let existing) = session.chatMessages[idx].blocks[lastIdx].kind {
-                                                session.chatMessages[idx].blocks[lastIdx] = ContentBlock(
-                                                    id: session.chatMessages[idx].blocks[lastIdx].id,
-                                                    kind: .text(existing + text)
-                                                )
-                                                session.chatMessages[idx].content += text
-                                            }
-                                        } else {
-                                            session.chatMessages[idx].blocks.append(.text(text))
-                                            session.chatMessages[idx].content += text
-                                        }
-                                        session.assistantState = .responding
+                                        session.chatMessages[idx].blocks.append(.text(""))
+                                        currentBlockIdx = session.chatMessages[idx].blocks.count - 1
                                     } else {
-                                        // First content — create the message
-                                        var msg = ChatMessage(role: .assistant, content: text, blocks: [.text(text)])
+                                        var msg = ChatMessage(role: .assistant, content: "", blocks: [.text("")])
                                         msg.durationSeconds = 0
                                         session.chatMessages.append(msg)
                                         messageIndex = session.chatMessages.count - 1
-                                        session.assistantState = .responding
+                                        currentBlockIdx = 0
                                     }
+                                    session.assistantState = .responding
                                 }
                             }
+                        }
+
+                        // Text delta — append to current block
+                        if eventType == "content_block_delta",
+                           let delta = event["delta"] as? [String: Any],
+                           let deltaType = delta["type"] as? String,
+                           deltaType == "text_delta",
+                           let text = delta["text"] as? String {
+                            DispatchQueue.main.async {
+                                if let msgIdx = messageIndex, msgIdx < session.chatMessages.count,
+                                   let blkIdx = currentBlockIdx, blkIdx < session.chatMessages[msgIdx].blocks.count,
+                                   case .text(let existing) = session.chatMessages[msgIdx].blocks[blkIdx].kind {
+                                    session.chatMessages[msgIdx].blocks[blkIdx] = ContentBlock(
+                                        id: session.chatMessages[msgIdx].blocks[blkIdx].id,
+                                        kind: .text(existing + text)
+                                    )
+                                    session.chatMessages[msgIdx].content += text
+                                }
+                            }
+                        }
+
+                        // Block finished
+                        if eventType == "content_block_stop" {
+                            currentBlockIdx = nil
                         }
                     }
 

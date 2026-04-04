@@ -11,8 +11,9 @@ The user (Allu) currently runs 2-3 Claude Code instances in separate Terminal.ap
 - **Language:** Swift 5.9+
 - **UI:** SwiftUI (macOS 14+ / Sonoma)
 - **Process management:** Foundation `Process` + `Pipe` for spawning Claude Code
-- **No external dependencies** — pure Apple frameworks
-- **Build:** Swift Package Manager (`Package.swift`) or Xcode
+- **Dependencies:** SwiftTerm (terminal emulator library)
+- **Build:** Swift Package Manager only — run `bash build.sh` or `swift build`. There is NO Xcode project. Do NOT try to use xcodebuild or look for a .xcodeproj.
+- **Communication with Claude:** Uses `claude -p --output-format stream-json` (not PTY/terminal parsing)
 
 ## Architecture Overview
 
