@@ -38,6 +38,8 @@ class Session: ObservableObject, Identifiable {
     @Published var chatMessages: [ChatMessage] = []
     @Published var assistantState: AssistantState = .idle
     @Published var planMode: Bool = false
+    @Published var lastToolName: String?
+    @Published var lastToolCommand: String?
 
     /// Claude Code session ID for --resume multi-turn
     var claudeSessionId: String?

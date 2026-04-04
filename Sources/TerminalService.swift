@@ -180,7 +180,12 @@ class TerminalService {
                                     default: return "\(name)..."
                                     }
                                 }()
-                                DispatchQueue.main.async { session.assistantState = .thinking(label) }
+                                let toolCommand = input["command"] as? String
+                                DispatchQueue.main.async {
+                                    session.assistantState = .thinking(label)
+                                    session.lastToolName = name
+                                    session.lastToolCommand = toolCommand
+                                }
 
                             default: break
                             }

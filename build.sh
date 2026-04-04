@@ -62,9 +62,10 @@ if [ ! -f "$APP/Contents/Info.plist" ]; then
 PLIST
 fi
 
-# Copy icon
-mkdir -p "$APP/Contents/Resources"
+# Copy resources
+mkdir -p "$APP/Contents/Resources/PetFrames"
 cp Resources/ClaudeStation.icns "$APP/Contents/Resources/" 2>/dev/null
+cp Resources/PetFrames/*.png "$APP/Contents/Resources/PetFrames/" 2>/dev/null
 
 echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1

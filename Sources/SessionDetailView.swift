@@ -412,6 +412,9 @@ struct InputBar: View {
                 }
 
             HStack(alignment: .center, spacing: 8) {
+                // Pixel pet mascot
+                PetView(session: session)
+
                 // Plus button for attachments
                 Button(action: onAttach) {
                     Image(systemName: "plus")
