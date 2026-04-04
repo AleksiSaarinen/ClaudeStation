@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
+    @State private var isAtBottom = true
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -10,6 +11,7 @@ struct ChatView: View {
     }
 
     var body: some View {
+        ZStack(alignment: .bottom) {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -44,9 +46,14 @@ struct ChatView: View {
                     }
 
                     // Invisible scroll anchor at the very bottom
-                    Color.clear
-                        .frame(height: 1)
-                        .id("bottom")
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: BottomVisibleKey.self,
+                            value: geo.frame(in: .named("chatScroll")).maxY
+                        )
+                    }
+                    .frame(height: 1)
+                    .id("bottom")
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -55,6 +62,11 @@ struct ChatView: View {
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
             .background(theme.chatBackground)
+            .coordinateSpace(name: "chatScroll")
+            .onPreferenceChange(BottomVisibleKey.self) { maxY in
+                // Bottom anchor is visible if its Y position is within the scroll view bounds + some margin
+                isAtBottom = maxY < 800 && maxY > 0
+            }
             .onAppear {
                 // Repeated scroll — LazyVStack lays out progressively
                 for delay in [0.05, 0.15, 0.3, 0.6, 1.0, 1.5] {
@@ -82,7 +94,39 @@ struct ChatView: View {
                 // Scroll as streaming text grows
                 proxy.scrollTo("bottom")
             }
+
+            // Floating scroll-to-bottom button
+            if !isAtBottom {
+                Button {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo("bottom")
+                    }
+                } label: {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.chromeText)
+                        .frame(width: 32, height: 32)
+                        .background(theme.assistantBubble)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
+                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                .animation(.easeInOut(duration: 0.2), value: isAtBottom)
+            }
         }
+        } // ZStack
+    }
+}
+
+// MARK: - Preference Keys
+
+struct BottomVisibleKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
