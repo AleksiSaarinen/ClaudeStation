@@ -225,6 +225,7 @@ struct SessionHeaderBar: View {
     @ObservedObject var session: Session
     @Binding var activeTab: DetailTab
     @Environment(\.theme) var theme
+    @State private var showFolderPicker = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -232,10 +233,30 @@ struct SessionHeaderBar: View {
                 .fill(session.status == .running ? theme.accent : theme.successDot)
                 .frame(width: 6, height: 6)
 
-            Text(session.workingDirectory)
-                .font(.system(.caption2, design: .monospaced))
+            Button {
+                let panel = NSOpenPanel()
+                panel.canChooseDirectories = true
+                panel.canChooseFiles = false
+                panel.allowsMultipleSelection = false
+                panel.directoryURL = URL(fileURLWithPath: (session.workingDirectory as NSString).expandingTildeInPath)
+                panel.prompt = "Choose"
+                panel.message = "Select working directory"
+                if panel.runModal() == .OK, let url = panel.url {
+                    session.workingDirectory = url.path
+                    session.claudeSessionId = nil // Reset conversation for new directory
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "folder")
+                        .font(.caption2)
+                    Text(session.workingDirectory)
+                        .font(.system(.caption2, design: .monospaced))
+                        .lineLimit(1)
+                }
                 .foregroundStyle(theme.chromeText)
-                .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .help("Change working directory")
 
             Spacer()
 

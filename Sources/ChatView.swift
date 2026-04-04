@@ -4,6 +4,11 @@ struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
 
+    /// Track content length of last message to detect streaming updates
+    private var lastMessageContent: Int {
+        session.chatMessages.last?.content.count ?? 0
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -51,14 +56,11 @@ struct ChatView: View {
             }
             .background(theme.chatBg)
             .onAppear {
-                // Double scroll: first gets close, second reaches actual bottom
-                // after LazyVStack lays out remaining content
-                proxy.scrollTo("bottom", anchor: .bottom)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+                // Repeated scroll — LazyVStack lays out progressively
+                for delay in [0.05, 0.15, 0.3, 0.6, 1.0, 1.5] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
                 }
             }
             .onChange(of: session.chatMessages.count) { _, _ in
@@ -68,12 +70,17 @@ struct ChatView: View {
                     }
                 }
             }
-            .onChange(of: session.assistantState) { _, newState in
-                if case .thinking = newState {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        proxy.scrollTo("bottom")
-                    }
+            .onChange(of: session.assistantState) { _, _ in
+                proxy.scrollTo("bottom")
+            }
+            .onChange(of: session.status) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    proxy.scrollTo("bottom")
                 }
+            }
+            .onChange(of: lastMessageContent) { _, _ in
+                // Scroll as streaming text grows
+                proxy.scrollTo("bottom")
             }
         }
     }
@@ -208,7 +215,7 @@ struct AssistantMessageRow: View {
             RoundedRectangle(cornerRadius: theme.borderRadius)
                 .stroke(theme.assistantBubbleBorder, lineWidth: 1)
         )
-        .padding(.trailing, 24)
+        .padding(.trailing, 8)
         .onAppear {
             withAnimation { appeared = true }
         }
