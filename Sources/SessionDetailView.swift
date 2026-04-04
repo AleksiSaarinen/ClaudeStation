@@ -48,7 +48,6 @@ struct SessionDetailView: View {
                     },
                     onSend: {
                         guard !inputText.isEmpty || pasteboardWatcher.pendingImagePath != nil else { return }
-                        // Build message with optional image path
                         var message = inputText
                         if let path = pasteboardWatcher.pendingImagePath {
                             let prefix = message.isEmpty ? "" : "\n"

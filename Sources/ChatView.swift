@@ -181,19 +181,47 @@ struct UserMessageRow: View {
     @Environment(\.theme) var theme
     @State private var appeared = false
 
+    private var textContent: String {
+        // Strip [Image: path] from display text
+        message.content.replacingOccurrences(
+            of: "\\[Image: [^\\]]+\\]", with: "", options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var imagePath: String? {
+        guard let range = message.content.range(of: "\\[Image: ([^\\]]+)\\]", options: .regularExpression),
+              let innerRange = message.content.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression)
+        else { return nil }
+        return String(message.content[innerRange])
+    }
+
     var body: some View {
         HStack {
             Spacer(minLength: 80)
-            Text(message.content)
-                .font(theme.monoFont)
-                .foregroundStyle(theme.userBubbleText)
-                .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(theme.userBubble)
-                .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
-                .scaleEffect(appeared ? 1.0 : 0.92)
-                .opacity(appeared ? 1.0 : 0.0)
+            VStack(alignment: .trailing, spacing: 6) {
+                // Image preview if attached
+                if let path = imagePath, let image = NSImage(contentsOfFile: path) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 200, maxHeight: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
+                // Text content (without [Image: ...])
+                if !textContent.isEmpty {
+                    Text(textContent)
+                        .font(theme.monoFont)
+                        .foregroundStyle(theme.userBubbleText)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(theme.userBubble)
+            .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
+            .scaleEffect(appeared ? 1.0 : 0.92)
+            .opacity(appeared ? 1.0 : 0.0)
         }
         .onAppear {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { appeared = true }
