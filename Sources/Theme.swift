@@ -74,7 +74,7 @@ extension Color {
 extension Theme {
     static let midnight = Theme(
         id: "midnight", name: "Midnight",
-        chatBg: Color(hex: "#13131F"), chatBgGradientEnd: Color(hex: "#1a1a2e"),
+        chatBg: Color(hex: "#13131F"), chatBgGradientEnd: Color(hex: "#0a0a18"),
         userBubble: Color(hex: "#7B6FDE"), userBubbleText: .white,
         assistantBubble: Color(hex: "#1C1C2E"), assistantBubbleBorder: Color(hex: "#2D2D44"), assistantText: Color(hex: "#E0E0F0"),
         toolCardBg: Color(hex: "#161625"), toolCardBorder: Color(hex: "#2D2D44"), toolCardText: Color(hex: "#A0A0C0"),
@@ -89,7 +89,7 @@ extension Theme {
 
     static let aurora = Theme(
         id: "aurora", name: "Aurora",
-        chatBg: Color(hex: "#242933"), chatBgGradientEnd: Color(hex: "#1a2333"),
+        chatBg: Color(hex: "#2E3440"), chatBgGradientEnd: Color(hex: "#171c24"),
         userBubble: Color(hex: "#88C0D0"), userBubbleText: Color(hex: "#2E3440"),
         assistantBubble: Color(hex: "#2E3440"), assistantBubbleBorder: Color(hex: "#3B4252"), assistantText: Color(hex: "#D8DEE9"),
         toolCardBg: Color(hex: "#272D38"), toolCardBorder: Color(hex: "#3B4252"), toolCardText: Color(hex: "#81A1C1"),
@@ -104,7 +104,7 @@ extension Theme {
 
     static let rose = Theme(
         id: "rose", name: "Rosé",
-        chatBg: Color(hex: "#191724"), chatBgGradientEnd: Color(hex: "#1a1520"),
+        chatBg: Color(hex: "#1F1D2E"), chatBgGradientEnd: Color(hex: "#0e0c16"),
         userBubble: Color(hex: "#EB6F92"), userBubbleText: .white,
         assistantBubble: Color(hex: "#1F1D2E"), assistantBubbleBorder: Color(hex: "#2A2740"), assistantText: Color(hex: "#E0DEF4"),
         toolCardBg: Color(hex: "#1A1826"), toolCardBorder: Color(hex: "#2A2740"), toolCardText: Color(hex: "#908CAA"),
@@ -134,7 +134,7 @@ extension Theme {
 
     static let phosphor = Theme(
         id: "phosphor", name: "Phosphor",
-        chatBg: Color(hex: "#0C0C0C"), chatBgGradientEnd: Color(hex: "#001a00"),
+        chatBg: Color(hex: "#0C0C0C"), chatBgGradientEnd: Color(hex: "#002200"),
         userBubble: Color(hex: "#1A6B1A"), userBubbleText: Color(hex: "#33FF33"),
         assistantBubble: Color(hex: "#0A120A"), assistantBubbleBorder: Color(hex: "#1A2E1A"), assistantText: Color(hex: "#33FF33"),
         toolCardBg: Color(hex: "#0E140E"), toolCardBorder: Color(hex: "#1A2E1A"), toolCardText: Color(hex: "#33FF33"),
@@ -149,7 +149,7 @@ extension Theme {
 
     static let deepSea = Theme(
         id: "deepsea", name: "Deep Sea",
-        chatBg: Color(hex: "#0A1628"), chatBgGradientEnd: Color(hex: "#061018"),
+        chatBg: Color(hex: "#0D1B2A"), chatBgGradientEnd: Color(hex: "#040810"),
         userBubble: Color(hex: "#0D4A3A"), userBubbleText: Color(hex: "#00D4AA"),
         assistantBubble: Color(hex: "#0D1B2A"), assistantBubbleBorder: Color(hex: "#1B2D45"), assistantText: Color(hex: "#C0D8E8"),
         toolCardBg: Color(hex: "#0B1724"), toolCardBorder: Color(hex: "#1B2D45"), toolCardText: Color(hex: "#00D4AA"),
@@ -164,7 +164,7 @@ extension Theme {
 
     static let amber = Theme(
         id: "amber", name: "Amber",
-        chatBg: Color(hex: "#140F0A"), chatBgGradientEnd: Color(hex: "#0a0805"),
+        chatBg: Color(hex: "#1A1410"), chatBgGradientEnd: Color(hex: "#080502"),
         userBubble: Color(hex: "#3D2A0A"), userBubbleText: Color(hex: "#FFB347"),
         assistantBubble: Color(hex: "#1A1410"), assistantBubbleBorder: Color(hex: "#2E2418"), assistantText: Color(hex: "#FFB347"),
         toolCardBg: Color(hex: "#161110"), toolCardBorder: Color(hex: "#2E2418"), toolCardText: Color(hex: "#FFB347"),

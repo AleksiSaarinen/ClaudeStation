@@ -13,7 +13,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func newSession() {
-        sessionManager?.createSession()
+        sessionManager?.createSessionWithPicker()
     }
 }
 
@@ -46,7 +46,7 @@ struct ClaudeStationApp: App {
             // Replace default "New Window" (Cmd+N) with our "New Session"
             CommandGroup(replacing: .newItem) {
                 Button("New Session") {
-                    sessionManager.createSession()
+                    sessionManager.createSessionWithPicker()
                 }
                 .keyboardShortcut("t", modifiers: .command)
 

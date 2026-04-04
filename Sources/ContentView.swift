@@ -71,7 +71,7 @@ struct TabBar: View {
 
             // New tab button
             Button {
-                sessionManager.createSession()
+                sessionManager.createSessionWithPicker()
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .medium))

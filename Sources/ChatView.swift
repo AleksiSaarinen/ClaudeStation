@@ -231,11 +231,7 @@ struct AssistantMessageRow: View {
             // Content blocks
             VStack(alignment: .leading, spacing: 6) {
                 if message.blocks.isEmpty {
-                    Text(message.content)
-                        .font(theme.monoFont)
-                        .foregroundStyle(theme.assistantText)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    SelectableText(text: message.content, fontName: theme.fontMono, textColor: theme.assistantText)
                         .padding(.horizontal, 12)
                 } else {
                     let textBlocks = message.blocks.filter { if case .text = $0.kind { return true }; return false }
@@ -359,11 +355,7 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    Text(renderInline(part.text))
-                        .font(theme.monoFont)
-                        .foregroundStyle(theme.assistantText)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    SelectableText(text: part.text, fontName: theme.fontMono, textColor: theme.assistantText)
                 }
             }
         }
@@ -463,7 +455,8 @@ struct MarkdownText: View {
 
 struct SelectableText: NSViewRepresentable {
     let text: String
-    let theme: Theme
+    let fontName: String
+    let textColor: Color
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(wrappingLabelWithString: "")
@@ -472,50 +465,18 @@ struct SelectableText: NSViewRepresentable {
         field.drawsBackground = false
         field.isBezeled = false
         field.lineBreakMode = .byWordWrapping
+        field.cell?.wraps = true
+        field.cell?.isScrollable = false
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
     }
 
     func updateNSView(_ field: NSTextField, context: Context) {
-        let fontName = theme.fontMono
         let font = NSFont(name: fontName, size: 13) ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        field.attributedStringValue = parseMarkdown(text, font: font, color: NSColor(theme.assistantText))
-    }
-
-    private func parseMarkdown(_ text: String, font: NSFont, color: NSColor) -> NSAttributedString {
-        let result = NSMutableAttributedString(string: text, attributes: [
-            .font: font, .foregroundColor: color
-        ])
-
-        // Bold: **text**
-        if let regex = try? NSRegularExpression(pattern: "\\*\\*(.+?)\\*\\*") {
-            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
-                guard let fullRange = Range(match.range, in: text),
-                      let innerRange = Range(match.range(at: 1), in: text) else { continue }
-                let boldFont = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
-                let inner = NSAttributedString(string: String(text[innerRange]), attributes: [
-                    .font: boldFont, .foregroundColor: color
-                ])
-                result.replaceCharacters(in: NSRange(fullRange, in: text), with: inner)
-            }
-        }
-
-        // Inline code: `text`
-        let resultString = result.string
-        if let regex = try? NSRegularExpression(pattern: "`([^`]+)`") {
-            for match in regex.matches(in: resultString, range: NSRange(resultString.startIndex..., in: resultString)).reversed() {
-                guard let fullRange = Range(match.range, in: resultString),
-                      let innerRange = Range(match.range(at: 1), in: resultString) else { continue }
-                let inner = NSAttributedString(string: String(resultString[innerRange]), attributes: [
-                    .font: NSFont(name: theme.fontMono, size: 12) ?? font,
-                    .foregroundColor: NSColor(theme.accent),
-                    .backgroundColor: NSColor(theme.toolCardBg)
-                ])
-                result.replaceCharacters(in: NSRange(fullRange, in: resultString), with: inner)
-            }
-        }
-
-        return result
+        // Use stringValue + direct font/textColor — field editor inherits these correctly
+        field.stringValue = text
+        field.font = font
+        field.textColor = NSColor(textColor)
     }
 }
 

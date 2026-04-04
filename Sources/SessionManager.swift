@@ -99,6 +99,19 @@ class SessionManager: ObservableObject {
         scheduleSave()
     }
 
+    /// Create a session with a folder picker dialog
+    func createSessionWithPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Open"
+        panel.message = "Choose working directory for new session"
+        if panel.runModal() == .OK, let url = panel.url {
+            createSession(workingDirectory: url.path)
+        }
+    }
+
     /// Explicitly queue a message (for force-queue scenarios)
     func queueMessage(_ text: String, for session: Session) {
         session.messageQueue.append(QueuedMessage(text: text))
