@@ -61,7 +61,7 @@ struct ChatView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: session.chatMessages.count)
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
-            .background(theme.chatBackground)
+            .scrollContentBackground(.hidden)
             .coordinateSpace(name: "chatScroll")
             .onPreferenceChange(BottomVisibleKey.self) { maxY in
                 // Bottom anchor is visible if its Y position is within the scroll view bounds + some margin
@@ -124,6 +124,7 @@ struct ChatView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
         } // ZStack
+        .background(theme.chatBackground)
         .animation(.easeInOut(duration: 0.2), value: isAtBottom)
     }
 }

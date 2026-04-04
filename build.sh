@@ -70,7 +70,9 @@ cp Resources/PetFrames/*.png "$APP/Contents/Resources/PetFrames/" 2>/dev/null
 echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1
 
-# Install to /Applications
-cp -R "$APP" /Applications/ClaudeStation.app 2>/dev/null && echo "Installed to /Applications"
+# Install to /Applications (kill first so cp can overwrite)
+pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null; sleep 1
+rm -rf /Applications/ClaudeStation.app
+cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
 
 echo "Done! Run with: open /Applications/ClaudeStation.app"

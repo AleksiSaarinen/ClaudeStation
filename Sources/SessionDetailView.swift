@@ -24,17 +24,9 @@ struct SessionDetailView: View {
             SessionHeaderBar(session: session, activeTab: $activeTab)
 
             VStack(spacing: 0) {
-                ZStack {
-                    // SwiftTerm behind the chat (full size for proper PTY)
-                    SwiftTermView(session: session)
-                        .id(session.id)
-                        .allowsHitTesting(false)
-
-                    // Chat view on top
-                    ChatView(session: session)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { inputFocused = true }
+                ChatView(session: session)
+                    .contentShape(Rectangle())
+                    .onTapGesture { inputFocused = true }
 
                 // Inline queue strip (only visible when messages are queued)
                 if !session.messageQueue.isEmpty {
@@ -503,6 +495,5 @@ struct InputBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(theme.chatBackground)
     }
 }

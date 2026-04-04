@@ -7,6 +7,10 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            // Base gradient layer
+            theme.chatBackground
+                .ignoresSafeArea()
+
             VStack(spacing: 0) {
                 TabBar()
                     .environmentObject(sessionManager)
