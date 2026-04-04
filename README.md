@@ -2,6 +2,8 @@
 
 A native macOS app for managing Claude Code sessions with a chat UI, message queue, and pixel pet companion.
 
+**[Download latest release](https://github.com/AleksiSaarinen/ClaudeStation/releases/latest)** — unzip, drag to Applications, right-click → Open.
+
 ## Features
 
 - **Chat UI** — Structured responses with tool use cards, markdown rendering, syntax highlighting, and collapsible reasoning
