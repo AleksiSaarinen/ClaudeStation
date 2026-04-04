@@ -439,33 +439,14 @@ struct InputBar: View {
                 .buttonStyle(.plain)
                 .help("Attach file")
 
-                // Text editor — scrollable for long messages
-                ZStack(alignment: .topLeading) {
-                    if inputText.isEmpty {
-                        Text("Message to Claude...")
-                            .font(theme.monoFont)
-                            .foregroundStyle(theme.mutedText)
-                            .padding(.top, 1)
-                            .padding(.leading, 4)
-                            .allowsHitTesting(false)
-                    }
-                    TextEditor(text: $inputText)
-                        .font(theme.monoFont)
-                        .foregroundStyle(theme.assistantText)
-                        .scrollContentBackground(.hidden)
-                        .focused(inputFocused)
-                        .frame(minHeight: 20, maxHeight: 120)
-                        .onKeyPress(.return, phases: .down) { press in
-                            if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
-                                // Shift+Enter or Option+Enter → insert newline
-                                inputText += "\n"
-                                return .handled
-                            }
-                            // Plain Enter → send
-                            onSend()
-                            return .handled
-                        }
-                }
+                // Text field — grows up to 8 lines, scrolls internally beyond that
+                TextField("Message to Claude...", text: $inputText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(theme.monoFont)
+                    .foregroundStyle(theme.assistantText)
+                    .focused(inputFocused)
+                    .lineLimit(1...8)
+                    .onSubmit { onSend() }
 
                 // Right side buttons
                 HStack(spacing: 6) {
