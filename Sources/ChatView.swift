@@ -282,7 +282,7 @@ struct AssistantMessageRow: View {
                     if hasThinking && !showThinking {
                         // Show only the last text block (the final answer)
                         if let lastText = textBlocks.last, case .text(let text) = lastText.kind {
-                            MarkdownText(text: text)
+                            MarkdownText(text: text, isStreaming: isStreaming)
                                 .padding(.horizontal, 12)
                         }
 
@@ -367,12 +367,13 @@ struct AssistantMessageRow: View {
 
 struct MarkdownText: View {
     let text: String
+    var isStreaming: Bool = false
     @Environment(\.theme) var theme
 
     var body: some View {
         let parts = splitCodeBlocks(text)
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+            ForEach(Array(parts.enumerated()), id: \.offset) { idx, part in
                 if part.isCode {
                     // Code block with syntax highlighting
                     VStack(alignment: .leading, spacing: 0) {
@@ -398,12 +399,18 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    Text(renderInline(part.text))
-                        .foregroundStyle(theme.assistantText)
-                        .textSelection(.enabled)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    // Fade-in effect on the last prose part during streaming
+                    let isLastPart = idx == parts.count - 1
+                    if isStreaming && isLastPart {
+                        FadingInlineText(text: part.text, theme: theme, renderInline: renderInline)
+                    } else {
+                        Text(renderInline(part.text))
+                            .foregroundStyle(theme.assistantText)
+                            .textSelection(.enabled)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }
@@ -675,6 +682,45 @@ struct ToolResultCard: View {
                     .stroke(theme.toolCardBorder, lineWidth: 1)
             )
         }
+    }
+}
+
+// MARK: - Fading Inline Text (streaming reveal effect)
+
+struct FadingInlineText: View {
+    let text: String
+    let theme: Theme
+    let renderInline: (String) -> AttributedString
+    @State private var stableText = ""
+    @State private var newText = ""
+    @State private var newOpacity: Double = 1.0
+
+    var body: some View {
+        (Text(renderInline(stableText)).foregroundStyle(theme.assistantText) +
+         Text(renderInline(newText)).foregroundStyle(theme.assistantText.opacity(newOpacity)))
+            .textSelection(.enabled)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: text) { oldVal, newVal in
+                if newVal.count > oldVal.count {
+                    // Move previous new text into stable
+                    stableText = oldVal
+                    newText = String(newVal.dropFirst(oldVal.count))
+                    newOpacity = 0.0
+                    withAnimation(.easeIn(duration: 0.2)) {
+                        newOpacity = 1.0
+                    }
+                } else {
+                    // Text was replaced (not appended) — show all
+                    stableText = newVal
+                    newText = ""
+                    newOpacity = 1.0
+                }
+            }
+            .onAppear {
+                stableText = text
+            }
     }
 }
 
