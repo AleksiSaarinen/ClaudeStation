@@ -37,6 +37,7 @@ class Session: ObservableObject, Identifiable {
     @Published var isProcessingQueue: Bool = false
     @Published var chatMessages: [ChatMessage] = []
     @Published var assistantState: AssistantState = .idle
+    @Published var planMode: Bool = false
 
     /// Claude Code session ID for --resume multi-turn
     var claudeSessionId: String?

@@ -36,6 +36,11 @@ class TerminalService {
             args.append("--dangerously-skip-permissions")
         }
 
+        // Plan mode
+        if session.planMode {
+            args += ["--permission-mode", "plan"]
+        }
+
         // Resume existing conversation or start new
         if let sessionId = session.claudeSessionId {
             args += ["--resume", sessionId]
@@ -98,18 +103,34 @@ class TerminalService {
 
         let handle = pipe.fileHandleForReading
         var buffer = Data()
-        var blocks: [ContentBlock] = []
-        var plainTextParts: [String] = []
+        var messageIndex: Int?       // Index of the live assistant message
         var resultDuration: Int?
         var resultCost: Double?
 
-        // Read stdout line by line
+        /// Append a block to the live streaming message (creates it if needed)
+        func appendBlock(_ block: ContentBlock, textContent: String? = nil) {
+            DispatchQueue.main.async {
+                if let idx = messageIndex, idx < session.chatMessages.count {
+                    session.chatMessages[idx].blocks.append(block)
+                    if let text = textContent {
+                        let existing = session.chatMessages[idx].content
+                        session.chatMessages[idx].content = existing.isEmpty ? text : existing + "\n" + text
+                    }
+                } else {
+                    var msg = ChatMessage(role: .assistant, content: textContent ?? "", blocks: [block])
+                    msg.durationSeconds = 0
+                    session.chatMessages.append(msg)
+                    messageIndex = session.chatMessages.count - 1
+                }
+            }
+        }
+
+        // Read stdout line by line — stream blocks into live message
         while true {
             let chunk = handle.availableData
-            if chunk.isEmpty { break } // EOF
+            if chunk.isEmpty { break }
             buffer.append(chunk)
 
-            // Process complete lines
             while let newlineRange = buffer.range(of: Data([0x0A])) {
                 let lineData = buffer[buffer.startIndex..<newlineRange.lowerBound]
                 buffer = Data(buffer[newlineRange.upperBound...])
@@ -123,11 +144,8 @@ class TerminalService {
 
                 switch type {
                 case "system":
-                    // Extract session ID for --resume
                     if let sid = json["session_id"] as? String {
-                        DispatchQueue.main.async {
-                            session.claudeSessionId = sid
-                        }
+                        DispatchQueue.main.async { session.claudeSessionId = sid }
                     }
 
                 case "assistant":
@@ -139,8 +157,7 @@ class TerminalService {
                             switch blockType {
                             case "text":
                                 if let text = block["text"] as? String, !text.isEmpty {
-                                    blocks.append(.text(text))
-                                    plainTextParts.append(text)
+                                    appendBlock(.text(text), textContent: text)
                                     DispatchQueue.main.async {
                                         session.assistantState = .responding
                                     }
@@ -150,7 +167,7 @@ class TerminalService {
                                 let toolId = block["id"] as? String ?? UUID().uuidString
                                 let name = block["name"] as? String ?? "Unknown"
                                 let input = block["input"] as? [String: Any] ?? [:]
-                                blocks.append(.toolUse(id: toolId, name: name, input: input))
+                                appendBlock(.toolUse(id: toolId, name: name, input: input))
                                 let label: String = {
                                     let file = (input["file_path"] as? String ?? "").components(separatedBy: "/").last ?? ""
                                     switch name {
@@ -170,12 +187,9 @@ class TerminalService {
                                     default: return "\(name)..."
                                     }
                                 }()
-                                DispatchQueue.main.async {
-                                    session.assistantState = .thinking(label)
-                                }
+                                DispatchQueue.main.async { session.assistantState = .thinking(label) }
 
-                            default:
-                                break
+                            default: break
                             }
                         }
                     }
@@ -189,54 +203,45 @@ class TerminalService {
                         resultContent = content.compactMap { $0["text"] as? String }.joined(separator: "\n")
                     }
                     if !resultContent.isEmpty {
-                        blocks.append(.toolResult(toolUseId: toolUseId, content: resultContent))
+                        appendBlock(.toolResult(toolUseId: toolUseId, content: resultContent))
                     }
 
                 case "result":
                     resultDuration = json["duration_ms"] as? Int
                     resultCost = json["total_cost_usd"] as? Double
                     if let sid = json["session_id"] as? String {
-                        DispatchQueue.main.async {
-                            session.claudeSessionId = sid
-                        }
+                        DispatchQueue.main.async { session.claudeSessionId = sid }
                     }
 
-                default:
-                    break
+                default: break
                 }
             }
         }
 
         process.waitUntilExit()
 
-        // Read stderr for error messages
+        // Read stderr
         let stderrData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        // Finalize on main thread
+        // Finalize
         let duration = Date().timeIntervalSince(startTime)
         DispatchQueue.main.async {
             session.activeProcess = nil
 
-            // Show error if process failed with no response
-            if blocks.isEmpty && process.terminationStatus != 0 && !stderrText.isEmpty {
+            // Update duration/cost on the streamed message
+            if let idx = messageIndex, idx < session.chatMessages.count {
+                session.chatMessages[idx].durationSeconds = duration
+                session.chatMessages[idx].durationApiMs = resultDuration
+                session.chatMessages[idx].costUsd = resultCost
+            } else if process.terminationStatus != 0 && !stderrText.isEmpty {
                 let err = ChatMessage(role: .assistant, content: "Error: \(stderrText)")
                 session.chatMessages.append(err)
-            }
-
-            if !blocks.isEmpty {
-                let plainText = plainTextParts.joined(separator: "\n")
-                var msg = ChatMessage(role: .assistant, content: plainText, blocks: blocks)
-                msg.durationSeconds = duration
-                msg.durationApiMs = resultDuration
-                msg.costUsd = resultCost
-                session.chatMessages.append(msg)
             }
 
             session.status = .waitingForInput
             session.assistantState = .idle
 
-            // Auto-process queue
             if !session.messageQueue.isEmpty {
                 self.processNextInQueue(for: session)
             }

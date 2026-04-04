@@ -369,7 +369,6 @@ struct InputBar: View {
     var onForceQueue: () -> Void
     var onAttach: () -> Void = {}
     @Environment(\.theme) var theme
-    @State private var planMode = false
     @Binding var showImagePreview: Bool
 
     private var isReady: Bool {
@@ -436,16 +435,16 @@ struct InputBar: View {
                 HStack(spacing: 6) {
                     // Plan mode toggle
                     Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { planMode.toggle() }
+                        withAnimation(.easeInOut(duration: 0.15)) { session.planMode.toggle() }
                     } label: {
                         Text("Plan")
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(planMode ? theme.userBubbleText : theme.mutedText)
+                            .foregroundStyle(session.planMode ? theme.userBubbleText : theme.mutedText)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(planMode ? theme.accent : theme.toolCardBg)
+                            .background(session.planMode ? theme.accent : theme.toolCardBg)
                             .clipShape(Capsule())
-                            .overlay(Capsule().stroke(planMode ? theme.accent : theme.toolCardBorder, lineWidth: 1))
+                            .overlay(Capsule().stroke(session.planMode ? theme.accent : theme.toolCardBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .help("Toggle plan mode")
