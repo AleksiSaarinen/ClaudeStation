@@ -12,6 +12,7 @@ struct SessionDetailView: View {
     @State private var activeTab: DetailTab = .terminal
     @State private var showFilePicker = false
     @State private var isDragOver = false
+    @State private var showImagePreview = false
     @StateObject private var minigameBridge = MinigameBridge()
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
@@ -41,22 +42,18 @@ struct SessionDetailView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                // Screenshot attachment preview
-                if let image = pasteboardWatcher.pendingImage {
-                    AttachmentPreview(image: image) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            pasteboardWatcher.clear()
-                        }
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-
                 // Input bar
                 InputBar(
                     inputText: $inputText,
                     inputFocused: $inputFocused,
                     session: session,
+                    attachedImage: pasteboardWatcher.pendingImage,
                     hasAttachment: pasteboardWatcher.pendingImagePath != nil,
+                    onRemoveAttachment: {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            pasteboardWatcher.clear()
+                        }
+                    },
                     onSend: {
                         guard !inputText.isEmpty || pasteboardWatcher.pendingImagePath != nil else { return }
                         // Build message with optional image path
@@ -80,7 +77,8 @@ struct SessionDetailView: View {
                     },
                     onAttach: {
                         showFilePicker = true
-                    }
+                    },
+                    showImagePreview: $showImagePreview
                 )
                 .fileImporter(
                     isPresented: $showFilePicker,
@@ -141,6 +139,28 @@ struct SessionDetailView: View {
             }
             .animation(.easeInOut(duration: 0.2), value: isDragOver)
         }
+        .overlay {
+            if showImagePreview, let img = pasteboardWatcher.pendingImage {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture { showImagePreview = false }
+                    .overlay {
+                        VStack(spacing: 8) {
+                            Image(nsImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: 700, maxHeight: 500)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .shadow(radius: 20)
+                                .onTapGesture {}
+                            Text("\(Int(img.size.width)) x \(Int(img.size.height))")
+                                .font(.caption).foregroundStyle(.white.opacity(0.6))
+                        }
+                    }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: showImagePreview)
         .onAppear {
             inputFocused = true
             pasteboardWatcher.startWatching()
@@ -302,26 +322,31 @@ struct AttachmentPreview: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
-        .sheet(isPresented: $showFullPreview) {
-            VStack(spacing: 0) {
-                HStack {
-                    Text("\(Int(image.size.width)) x \(Int(image.size.height))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Done") { showFullPreview = false }
-                        .keyboardShortcut(.escape, modifiers: [])
-                }
-                .padding(12)
+        .overlay {
+            if showFullPreview {
+                // Full-screen dimmed overlay — click anywhere to dismiss
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture { showFullPreview = false }
+                    .overlay {
+                        VStack(spacing: 8) {
+                            Image(nsImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: 700, maxHeight: 500)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .shadow(radius: 20)
+                                .onTapGesture {} // prevent dismiss on image click
 
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 800, maxHeight: 600)
-                    .padding(.bottom, 12)
+                            Text("\(Int(image.size.width)) x \(Int(image.size.height))")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
+                    }
+                    .transition(.opacity)
             }
-            .frame(minWidth: 400, minHeight: 300)
         }
+        .animation(.easeInOut(duration: 0.15), value: showFullPreview)
     }
 }
 
@@ -337,12 +362,15 @@ struct InputBar: View {
     @Binding var inputText: String
     var inputFocused: FocusState<Bool>.Binding
     @ObservedObject var session: Session
+    var attachedImage: NSImage? = nil
     var hasAttachment: Bool = false
+    var onRemoveAttachment: () -> Void = {}
     var onSend: () -> Void
     var onForceQueue: () -> Void
     var onAttach: () -> Void = {}
     @Environment(\.theme) var theme
     @State private var planMode = false
+    @Binding var showImagePreview: Bool
 
     private var isReady: Bool {
         session.status == .waitingForInput || session.status == .idle
@@ -351,6 +379,36 @@ struct InputBar: View {
     var body: some View {
         VStack(spacing: 0) {
             // Input field in rounded container
+            VStack(alignment: .leading, spacing: 8) {
+                // Attached images inside the pill
+                if let img = attachedImage {
+                    HStack(spacing: 8) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(nsImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(theme.toolCardBorder, lineWidth: 1)
+                                )
+                                .onTapGesture { showImagePreview = true }
+                                .cursor(.pointingHand)
+
+                            Button(action: onRemoveAttachment) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.white)
+                                    .background(Circle().fill(.black.opacity(0.6)).frame(width: 12, height: 12))
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: 4, y: -4)
+                        }
+                        Spacer()
+                    }
+                }
+
             HStack(alignment: .center, spacing: 8) {
                 // Plus button for attachments
                 Button(action: onAttach) {
@@ -406,6 +464,7 @@ struct InputBar: View {
                     .help(isReady ? "Send (Enter)" : "Queue (Enter)")
                     .keyboardShortcut(.return, modifiers: [])
                 }
+            }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
