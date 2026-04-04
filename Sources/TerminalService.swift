@@ -105,28 +105,10 @@ class TerminalService {
 
         let handle = pipe.fileHandleForReading
         var buffer = Data()
-        var messageIndex: Int?       // Index of the live assistant message
-        var currentBlockIdx: Int?    // Index of current streaming text block within the message
+        var messageCreated = false    // Track on background thread
+        var streamingText = ""        // Accumulate current text block
         var resultDuration: Int?
         var resultCost: Double?
-
-        /// Append a block to the live streaming message (creates it if needed)
-        func appendBlock(_ block: ContentBlock, textContent: String? = nil) {
-            DispatchQueue.main.async {
-                if let idx = messageIndex, idx < session.chatMessages.count {
-                    session.chatMessages[idx].blocks.append(block)
-                    if let text = textContent {
-                        let existing = session.chatMessages[idx].content
-                        session.chatMessages[idx].content = existing.isEmpty ? text : existing + "\n" + text
-                    }
-                } else {
-                    var msg = ChatMessage(role: .assistant, content: textContent ?? "", blocks: [block])
-                    msg.durationSeconds = 0
-                    session.chatMessages.append(msg)
-                    messageIndex = session.chatMessages.count - 1
-                }
-            }
-        }
 
         // Read stdout line by line — stream blocks into live message
         while true {
@@ -159,21 +141,26 @@ class TerminalService {
 
                             switch blockType {
                             case "text":
-                                if let text = block["text"] as? String, !text.isEmpty {
-                                    // Skip if already streamed via content_block_delta
-                                    if messageIndex == nil {
-                                        appendBlock(.text(text), textContent: text)
-                                        DispatchQueue.main.async {
-                                            session.assistantState = .responding
-                                        }
-                                    }
-                                }
+                                // Text already handled by stream_event deltas — skip
+                                break
 
                             case "tool_use":
                                 let toolId = block["id"] as? String ?? UUID().uuidString
                                 let name = block["name"] as? String ?? "Unknown"
                                 let input = block["input"] as? [String: Any] ?? [:]
-                                appendBlock(.toolUse(id: toolId, name: name, input: input))
+                                let created = messageCreated
+                                messageCreated = true
+                                let toolBlock = ContentBlock.toolUse(id: toolId, name: name, input: input)
+                                DispatchQueue.main.async {
+                                    if created, let last = session.chatMessages.indices.last,
+                                       session.chatMessages[last].role == .assistant {
+                                        session.chatMessages[last].blocks.append(toolBlock)
+                                    } else {
+                                        var msg = ChatMessage(role: .assistant, content: "", blocks: [toolBlock])
+                                        msg.durationSeconds = 0
+                                        session.chatMessages.append(msg)
+                                    }
+                                }
                                 let label: String = {
                                     let file = (input["file_path"] as? String ?? "").components(separatedBy: "/").last ?? ""
                                     switch name {
@@ -209,55 +196,59 @@ class TerminalService {
                         resultContent = content.compactMap { $0["text"] as? String }.joined(separator: "\n")
                     }
                     if !resultContent.isEmpty {
-                        appendBlock(.toolResult(toolUseId: toolUseId, content: resultContent))
+                        let resultBlock = ContentBlock.toolResult(toolUseId: toolUseId, content: resultContent)
+                        DispatchQueue.main.async {
+                            if let last = session.chatMessages.indices.last,
+                               session.chatMessages[last].role == .assistant {
+                                session.chatMessages[last].blocks.append(resultBlock)
+                            }
+                        }
                     }
 
                 case "stream_event":
                     if let event = json["event"] as? [String: Any],
                        let eventType = event["type"] as? String {
 
-                        // New content block starting — create a fresh block
                         if eventType == "content_block_start" {
-                            if let block = event["content_block"] as? [String: Any],
-                               let blockType = block["type"] as? String, blockType == "text" {
-                                DispatchQueue.main.async {
-                                    if let idx = messageIndex, idx < session.chatMessages.count {
-                                        session.chatMessages[idx].blocks.append(.text(""))
-                                        currentBlockIdx = session.chatMessages[idx].blocks.count - 1
-                                    } else {
-                                        var msg = ChatMessage(role: .assistant, content: "", blocks: [.text("")])
-                                        msg.durationSeconds = 0
-                                        session.chatMessages.append(msg)
-                                        messageIndex = session.chatMessages.count - 1
-                                        currentBlockIdx = 0
-                                    }
-                                    session.assistantState = .responding
-                                }
-                            }
+                            // Reset streaming text for new block
+                            streamingText = ""
                         }
 
-                        // Text delta — append to current block
                         if eventType == "content_block_delta",
                            let delta = event["delta"] as? [String: Any],
                            let deltaType = delta["type"] as? String,
                            deltaType == "text_delta",
                            let text = delta["text"] as? String {
+                            streamingText += text
+                            // Dispatch UI update with accumulated text
+                            let snapshot = streamingText
+                            let isFirst = !messageCreated
+                            messageCreated = true
                             DispatchQueue.main.async {
-                                if let msgIdx = messageIndex, msgIdx < session.chatMessages.count,
-                                   let blkIdx = currentBlockIdx, blkIdx < session.chatMessages[msgIdx].blocks.count,
-                                   case .text(let existing) = session.chatMessages[msgIdx].blocks[blkIdx].kind {
-                                    session.chatMessages[msgIdx].blocks[blkIdx] = ContentBlock(
-                                        id: session.chatMessages[msgIdx].blocks[blkIdx].id,
-                                        kind: .text(existing + text)
-                                    )
-                                    session.chatMessages[msgIdx].content += text
+                                if isFirst {
+                                    var msg = ChatMessage(role: .assistant, content: snapshot, blocks: [.text(snapshot)])
+                                    msg.durationSeconds = 0
+                                    session.chatMessages.append(msg)
+                                } else if let last = session.chatMessages.indices.last,
+                                          session.chatMessages[last].role == .assistant {
+                                    // Update the last text block with full accumulated text
+                                    let blocks = session.chatMessages[last].blocks
+                                    if let blkIdx = blocks.lastIndex(where: {
+                                        if case .text = $0.kind { return true }; return false
+                                    }) {
+                                        session.chatMessages[last].blocks[blkIdx] = ContentBlock(
+                                            id: session.chatMessages[last].blocks[blkIdx].id,
+                                            kind: .text(snapshot)
+                                        )
+                                    }
+                                    session.chatMessages[last].content = snapshot
                                 }
+                                session.assistantState = .responding
                             }
                         }
 
-                        // Block finished
                         if eventType == "content_block_stop" {
-                            currentBlockIdx = nil
+                            streamingText = ""
                         }
                     }
 
@@ -285,10 +276,11 @@ class TerminalService {
             session.activeProcess = nil
 
             // Update duration/cost on the streamed message
-            if let idx = messageIndex, idx < session.chatMessages.count {
-                session.chatMessages[idx].durationSeconds = duration
-                session.chatMessages[idx].durationApiMs = resultDuration
-                session.chatMessages[idx].costUsd = resultCost
+            if let last = session.chatMessages.indices.last,
+               session.chatMessages[last].role == .assistant {
+                session.chatMessages[last].durationSeconds = duration
+                session.chatMessages[last].durationApiMs = resultDuration
+                session.chatMessages[last].costUsd = resultCost
             } else if process.terminationStatus != 0 && !stderrText.isEmpty {
                 let err = ChatMessage(role: .assistant, content: "Error: \(stderrText)")
                 session.chatMessages.append(err)

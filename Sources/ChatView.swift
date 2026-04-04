@@ -172,7 +172,12 @@ struct AssistantMessageRow: View {
             // Content blocks
             VStack(alignment: .leading, spacing: 6) {
                 if message.blocks.isEmpty {
-                    SelectableText(text: message.content, theme: theme)
+                    Text(message.content)
+                        .font(theme.monoFont)
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                         .padding(.horizontal, 12)
                 } else {
                     ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
@@ -251,7 +256,12 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    SelectableText(text: part.text, theme: theme)
+                    Text(renderInline(part.text))
+                        .font(theme.monoFont)
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
             }
         }
