@@ -65,8 +65,10 @@ struct ChatView: View {
             .scrollContentBackground(.hidden)
             .coordinateSpace(name: "chatScroll")
             .onPreferenceChange(BottomVisibleKey.self) { maxY in
-                // Bottom anchor is visible if its Y position is within the scroll view bounds + some margin
-                isAtBottom = maxY < 800 && maxY > 0
+                // Generous threshold — during streaming, content grows fast and pushes
+                // the bottom anchor down before scroll catches up. A tight threshold
+                // causes isAtBottom to flip false permanently, killing auto-scroll.
+                isAtBottom = maxY < 2000 && maxY > 0
             }
             .onAppear {
                 // Single delayed scroll for initial layout
