@@ -98,6 +98,11 @@ struct ChatView: View {
                     proxy.scrollTo("bottom")
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottomIfNeeded"))) { _ in
+                if isAtBottom {
+                    proxy.scrollTo("bottom")
+                }
+            }
         } // ScrollViewReader
 
             // Floating scroll-to-bottom button (outside ScrollViewReader, inside ZStack)

@@ -95,6 +95,12 @@ struct SessionDetailView: View {
             }
             .animation(.easeInOut(duration: 0.25), value: session.messageQueue.count)
             .animation(.easeInOut(duration: 0.2), value: pasteboardWatcher.pendingImage != nil)
+            .onChange(of: inputText) { _, _ in
+                // When the input bar resizes (multi-line), keep chat pinned to bottom
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    NotificationCenter.default.post(name: .init("ScrollToBottomIfNeeded"), object: nil)
+                }
+            }
             .overlay {
                 if isDragOver {
                     DropOverlay()
