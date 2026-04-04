@@ -133,7 +133,7 @@ struct ClaudeStationApp: App {
 
         // Include last few chat messages
         let recentMessages = session.chatMessages.suffix(5).map { msg -> [String: String] in
-            ["role": msg.role == .user ? "user" : "assistant", "content": String(msg.content.prefix(200))]
+            ["role": msg.role == .user ? "user" : "assistant", "content": msg.content]
         }
         info["recentMessages"] = recentMessages
 
