@@ -4,6 +4,7 @@ struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
     @State private var isAtBottom = true
+    @State private var lastScrollTime: Date = .distantPast
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -68,35 +69,24 @@ struct ChatView: View {
                 isAtBottom = maxY < 800 && maxY > 0
             }
             .onAppear {
-                // Repeated scroll — LazyVStack lays out progressively
-                for delay in [0.05, 0.15, 0.3, 0.6, 1.0, 1.5] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                // Single delayed scroll for initial layout
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
             }
             .onChange(of: session.chatMessages.count) { _, _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        proxy.scrollTo("bottom")
-                    }
-                }
-            }
-            .onChange(of: session.assistantState) { _, _ in
-                proxy.scrollTo("bottom")
-            }
-            .onChange(of: session.status) { _, _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    proxy.scrollTo("bottom")
-                }
+                // New message added — always scroll
+                throttledScroll(proxy: proxy, force: true)
             }
             .onChange(of: lastMessageContent) { _, _ in
-                proxy.scrollTo("bottom")
+                // Streaming content — only scroll if at bottom, throttled
+                throttledScroll(proxy: proxy, force: false)
+            }
+            .onChange(of: session.assistantState) { _, _ in
+                throttledScroll(proxy: proxy, force: false)
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
-                withAnimation(.easeOut(duration: 0.3)) {
-                    proxy.scrollTo("bottom")
-                }
+                proxy.scrollTo("bottom")
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottomIfNeeded"))) { _ in
                 if isAtBottom {
@@ -131,6 +121,16 @@ struct ChatView: View {
         } // ZStack
         .background(theme.chatBackground)
         .animation(.easeInOut(duration: 0.2), value: isAtBottom)
+    }
+
+    /// Scroll to bottom, throttled to ~100ms to avoid layout thrashing during streaming.
+    /// `force: true` skips the isAtBottom check (used for new messages from the user).
+    private func throttledScroll(proxy: ScrollViewProxy, force: Bool) {
+        guard force || isAtBottom else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastScrollTime) > 0.1 else { return }
+        lastScrollTime = now
+        proxy.scrollTo("bottom")
     }
 }
 
