@@ -91,33 +91,40 @@ struct ChatView: View {
                 }
             }
             .onChange(of: lastMessageContent) { _, _ in
-                // Scroll as streaming text grows
                 proxy.scrollTo("bottom")
             }
-
-            // Floating scroll-to-bottom button
-            if !isAtBottom {
-                Button {
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        proxy.scrollTo("bottom")
-                    }
-                } label: {
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.chromeText)
-                        .frame(width: 32, height: 32)
-                        .background(theme.assistantBubble)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
-                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+            .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
+                withAnimation(.easeOut(duration: 0.3)) {
+                    proxy.scrollTo("bottom")
                 }
-                .buttonStyle(.plain)
-                .padding(.bottom, 8)
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                .animation(.easeInOut(duration: 0.2), value: isAtBottom)
             }
-        }
+        } // ScrollViewReader
+
+            // Floating scroll-to-bottom button (outside ScrollViewReader, inside ZStack)
+            if !isAtBottom {
+                VStack {
+                    Spacer()
+                    Button {
+                        // Can't access proxy here, use notification
+                        NotificationCenter.default.post(name: .init("ScrollToBottom"), object: nil)
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(theme.chromeText)
+                            .frame(width: 32, height: 32)
+                            .background(theme.assistantBubble)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
+                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 12)
+                }
+                .allowsHitTesting(true)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
         } // ZStack
+        .animation(.easeInOut(duration: 0.2), value: isAtBottom)
     }
 }
 
