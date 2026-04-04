@@ -1,5 +1,12 @@
 # ClaudeStation — CLAUDE.md
 
+## Development Workflow
+
+After making changes:
+1. **Always rebuild and test**: `bash build.sh` then `open /Applications/ClaudeStation.app`, take a screenshot to verify
+2. **Push if it works**: commit and `git push` when tests pass
+3. **Release after bigger changes**: `bash release.sh v1.x.0 "notes"` to cut a GitHub Release with the built .app zip
+
 ## What This Is
 
 ClaudeStation is a **native macOS SwiftUI app** that manages multiple Claude Code terminal sessions with a **message queue system**. Think of it as a purpose-built terminal multiplexer specifically for Claude Code workflows.

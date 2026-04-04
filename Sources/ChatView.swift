@@ -248,10 +248,6 @@ struct AssistantMessageRow: View {
                     Image(systemName: "clock").font(.caption2).foregroundStyle(theme.timestampText)
                     Text(formatDuration(secs)).font(.caption2).foregroundStyle(theme.timestampText)
                 }
-                if let cost = message.costUsd, cost > 0 {
-                    Text("·").foregroundStyle(theme.mutedText)
-                    Text(String(format: "$%.3f", cost)).font(.caption2).foregroundStyle(theme.costText)
-                }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)

@@ -20,7 +20,22 @@ class TerminalService {
             return
         }
 
-        // Record user message
+        // Extract image attachment and rewrite as a prompt Claude can act on.
+        // The [Image: path] marker is stripped and replaced with an instruction
+        // to use the Read tool on the file, since `claude -p` has no --image flag.
+        var promptText = text
+        if let range = text.range(of: "\\[Image: [^\\]]+\\]", options: .regularExpression),
+           let pathRange = text.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression) {
+            let imagePath = String(text[pathRange])
+            let userText = text.replacingCharacters(in: range, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if userText.isEmpty {
+                promptText = "Read and look at the image file at \(imagePath) and describe what you see."
+            } else {
+                promptText = "Read and look at the image file at \(imagePath). \(userText)"
+            }
+        }
+
+        // Record user message (original text so [Image:] shows in chat)
         let userMsg = ChatMessage(role: .user, content: text)
         DispatchQueue.main.async {
             session.chatMessages.append(userMsg)
@@ -34,13 +49,11 @@ class TerminalService {
         let settings = AppSettings.shared
         var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
 
-        if settings.alwaysBypassPermissions {
-            args.append("--dangerously-skip-permissions")
-        }
-
-        // Plan mode
+        // Plan mode takes precedence over bypass permissions
         if session.planMode {
             args += ["--permission-mode", "plan"]
+        } else if settings.alwaysBypassPermissions {
+            args.append("--dangerously-skip-permissions")
         }
 
         // Resume existing conversation or start new
@@ -48,7 +61,7 @@ class TerminalService {
             args += ["--resume", sessionId]
         }
 
-        args.append(text)
+        args.append(promptText)
 
         let workDir = (session.workingDirectory as NSString).expandingTildeInPath
 
@@ -66,7 +79,7 @@ class TerminalService {
         let process = Process()
         let pipe = Pipe()
         let errorPipe = Pipe()
-        let escapedText = text.replacingOccurrences(of: "'", with: "'\\''")
+        let escapedText = promptText.replacingOccurrences(of: "'", with: "'\\''")
         let claudeCmd = ([settings.claudeCodePath] + args.dropLast()).joined(separator: " ")
         let fullCmd = "cd '\(workDir)' && \(claudeCmd) '\(escapedText)'"
 

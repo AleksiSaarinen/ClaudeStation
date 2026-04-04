@@ -86,11 +86,18 @@ class PasteboardWatcher: ObservableObject {
         }
     }
 
+    /// Clear UI state and delete the temp file (user dismissed the attachment)
     func clear() {
         pendingImage = nil
         if let path = pendingImagePath {
             try? FileManager.default.removeItem(atPath: path)
         }
+        pendingImagePath = nil
+    }
+
+    /// Clear UI state but keep the temp file (it was sent — Claude still needs to read it)
+    func clearForSend() {
+        pendingImage = nil
         pendingImagePath = nil
     }
 }

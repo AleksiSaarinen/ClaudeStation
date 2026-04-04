@@ -6,11 +6,17 @@ import SwiftUI
 class SessionManager: ObservableObject {
     @Published var sessions: [Session] = []
     @Published var activeSessionId: UUID?
-    
+    @Published var detachedSessionIds: Set<UUID> = []
+
     let settings = AppSettings.shared
-    
+
     var activeSession: Session? {
         sessions.first { $0.id == activeSessionId }
+    }
+
+    /// Sessions visible in the main window tab bar (excludes detached)
+    var tabBarSessions: [Session] {
+        sessions.filter { !detachedSessionIds.contains($0.id) }
     }
     
     private var saveDebounce: DispatchWorkItem?
@@ -71,23 +77,40 @@ class SessionManager: ObservableObject {
     }
     
     func closeSession(_ id: UUID) {
+        detachedSessionIds.remove(id)
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         let session = sessions[index]
-        
+
         // Terminate the process if running
         TerminalService.shared.terminate(session: session)
-        
+
         sessions.remove(at: index)
-        
+
         // Switch to another session if we closed the active one
         if activeSessionId == id {
-            activeSessionId = sessions.last?.id
+            activeSessionId = tabBarSessions.last?.id ?? sessions.last?.id
         }
-        
+
         // Always keep at least one session
         if sessions.isEmpty {
             createSession()
         }
+        scheduleSave()
+    }
+
+    // MARK: - Multi-Window (Detach / Reattach)
+
+    func detachSession(_ id: UUID) {
+        detachedSessionIds.insert(id)
+        if activeSessionId == id {
+            activeSessionId = tabBarSessions.first?.id
+        }
+        scheduleSave()
+    }
+
+    func reattachSession(_ id: UUID) {
+        detachedSessionIds.remove(id)
+        activeSessionId = id
         scheduleSave()
     }
     

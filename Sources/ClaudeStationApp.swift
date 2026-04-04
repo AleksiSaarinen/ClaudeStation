@@ -52,7 +52,7 @@ struct ClaudeStationApp: App {
 
                 Divider()
 
-                ForEach(Array(sessionManager.sessions.enumerated()), id: \.element.id) { index, session in
+                ForEach(Array(sessionManager.tabBarSessions.enumerated()), id: \.element.id) { index, session in
                     if index < 9 {
                         Button("Switch to: \(session.displayName)") {
                             sessionManager.activeSessionId = session.id
@@ -60,6 +60,17 @@ struct ClaudeStationApp: App {
                         .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
                     }
                 }
+            }
+        }
+
+        // Detached session windows (tear-off tabs)
+        WindowGroup(id: "detached-session", for: UUID.self) { $sessionId in
+            if let sessionId {
+                let activeTheme = Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil)
+                DetachedSessionWindow(sessionId: sessionId)
+                    .environmentObject(sessionManager)
+                    .environment(\.theme, activeTheme)
+                    .frame(minWidth: 350, minHeight: 300)
             }
         }
 
