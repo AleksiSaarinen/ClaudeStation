@@ -266,7 +266,6 @@ struct AssistantMessageRow: View {
                         .textSelection(.enabled)
                         .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
-                        .id("plain-\(message.content.count)")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                 } else {
@@ -319,7 +318,6 @@ struct AssistantMessageRow: View {
                                 switch block.kind {
                                 case .text(let text):
                                     MarkdownText(text: text)
-                                        .id("md-\(text.count)")
                                 case .toolUse(let name, _):
                                     ToolUseCard(name: name, input: block.toolInput)
                                 case .toolResult(let content):
@@ -376,6 +374,8 @@ struct MarkdownText: View {
                         Text(highlightSyntax(part.text))
                             .font(theme.monoCaption2Font)
                             .textSelection(.enabled)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -392,25 +392,47 @@ struct MarkdownText: View {
                         .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .id("inline-\(part.text.count)")
                 }
             }
         }
     }
 
     private func renderInline(_ text: String) -> AttributedString {
-        var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
-        // Set the base font on the entire string — bold runs get the bold variant automatically
         let baseFont = theme.resolvedNSFont(size: 13)
-        for run in result.runs {
-            let isBold = result[run.range].inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false
-            if isBold {
-                result[run.range].font = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
-            } else {
-                result[run.range].font = baseFont
+
+        // Insert a zero-width space after `<` when followed by a letter or `/`
+        // so the markdown parser doesn't interpret <Config>, </Tag>, <T> etc. as
+        // HTML tags and silently strip them from the output.
+        let escaped = text.replacingOccurrences(
+            of: "<([A-Za-z/])",
+            with: "<\u{200B}$1",
+            options: .regularExpression
+        )
+
+        if var result = try? AttributedString(markdown: escaped, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            // Verify the parser didn't silently drop content
+            let renderedCount = result.characters.count
+            let expectedMin = text.count * 2 / 3  // allow some shrinkage from syntax removal
+            if renderedCount >= expectedMin {
+                for run in result.runs {
+                    let isBold = result[run.range].inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false
+                    let isItalic = result[run.range].inlinePresentationIntent?.contains(.emphasized) ?? false
+                    if isBold {
+                        result[run.range].font = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
+                    } else if isItalic {
+                        result[run.range].font = NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask)
+                    } else {
+                        result[run.range].font = baseFont
+                    }
+                }
+                return result
             }
         }
-        return result
+
+        // Fallback: plain attributed string — no content loss
+        var plain = AttributedString(text)
+        plain.font = baseFont
+        return plain
     }
 
     private struct TextPart {
@@ -427,14 +449,20 @@ struct MarkdownText: View {
         var lang = ""
 
         for line in lines {
-            if line.hasPrefix("```") && !inCode {
-                // Start code block
-                let prose = current.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !prose.isEmpty { parts.append(TextPart(text: prose, isCode: false, language: "")) }
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") && !inCode {
+                // Start code block — flush accumulated prose
+                let prose = current.joined(separator: "\n")
+                // Only trim leading/trailing blank lines, preserve internal structure
+                let trimmedProse = prose
+                    .drop(while: { $0.isNewline })
+                    .reversed().drop(while: { $0.isNewline }).reversed()
+                let final = String(trimmedProse)
+                if !final.isEmpty { parts.append(TextPart(text: final, isCode: false, language: "")) }
                 current = []
                 inCode = true
-                lang = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-            } else if line.hasPrefix("```") && inCode {
+                lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+            } else if trimmed.hasPrefix("```") && inCode {
                 // End code block
                 let code = current.joined(separator: "\n")
                 parts.append(TextPart(text: code, isCode: true, language: lang))
@@ -446,9 +474,13 @@ struct MarkdownText: View {
             }
         }
 
-        let remaining = current.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !remaining.isEmpty {
-            parts.append(TextPart(text: remaining, isCode: inCode, language: inCode ? lang : ""))
+        let remaining = current.joined(separator: "\n")
+        let trimmedRemaining = remaining
+            .drop(while: { $0.isNewline })
+            .reversed().drop(while: { $0.isNewline }).reversed()
+        let final = String(trimmedRemaining)
+        if !final.isEmpty {
+            parts.append(TextPart(text: final, isCode: inCode, language: inCode ? lang : ""))
         }
         return parts
     }
