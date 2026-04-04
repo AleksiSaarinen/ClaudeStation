@@ -143,7 +143,9 @@ class TerminalService {
 
                             switch blockType {
                             case "text":
-                                // Text already handled by stream_event deltas — skip
+                                // Skip — streaming deltas handle text content.
+                                // With --include-partial-messages, assistant events fire
+                                // with PARTIAL text that would overwrite the fuller streamed text.
                                 break
 
                             case "tool_use":
@@ -294,7 +296,66 @@ class TerminalService {
             }
         }
 
+        // Process any remaining data in buffer (last line without trailing newline)
+        if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8), !line.isEmpty,
+           let jsonData = line.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+           let type = json["type"] as? String {
+            if type == "result" {
+                resultDuration = json["duration_ms"] as? Int
+                resultCost = json["total_cost_usd"] as? Double
+                if let sid = json["session_id"] as? String {
+                    DispatchQueue.main.async { session.claudeSessionId = sid }
+                }
+            }
+        }
+
         process.waitUntilExit()
+
+        // Read any remaining stdout after process exits
+        let remaining = handle.readDataToEndOfFile()
+        if !remaining.isEmpty {
+            let allRemaining = remaining
+            if let lines = String(data: allRemaining, encoding: .utf8) {
+                for line in lines.components(separatedBy: "\n") where !line.isEmpty {
+                    guard let jsonData = line.data(using: .utf8),
+                          let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                          let type = json["type"] as? String else { continue }
+
+                    if type == "stream_event",
+                       let event = json["event"] as? [String: Any],
+                       let eventType = event["type"] as? String,
+                       eventType == "content_block_delta",
+                       let delta = event["delta"] as? [String: Any],
+                       delta["type"] as? String == "text_delta",
+                       let text = delta["text"] as? String {
+                        streamingText += text
+                        let snapshot = streamingText
+                        let blockId = currentTextBlockId
+                        DispatchQueue.main.async {
+                            guard let last = session.chatMessages.indices.last,
+                                  session.chatMessages[last].role == .assistant,
+                                  let blockId else { return }
+                            if let blkIdx = session.chatMessages[last].blocks.firstIndex(where: { $0.id == blockId }) {
+                                session.chatMessages[last].blocks[blkIdx] = ContentBlock(id: blockId, kind: .text(snapshot))
+                            }
+                            let allText = session.chatMessages[last].blocks.compactMap { block -> String? in
+                                if case .text(let t) = block.kind, !t.isEmpty { return t }; return nil
+                            }.joined(separator: "\n\n")
+                            session.chatMessages[last].content = allText
+                        }
+                    }
+
+                    if type == "result" {
+                        resultDuration = json["duration_ms"] as? Int
+                        resultCost = json["total_cost_usd"] as? Double
+                        if let sid = json["session_id"] as? String {
+                            DispatchQueue.main.async { session.claudeSessionId = sid }
+                        }
+                    }
+                }
+            }
+        }
 
         // Read stderr
         let stderrData = errorPipe.fileHandleForReading.readDataToEndOfFile()

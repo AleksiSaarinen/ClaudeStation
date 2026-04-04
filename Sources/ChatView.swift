@@ -260,7 +260,14 @@ struct AssistantMessageRow: View {
             // Content blocks
             VStack(alignment: .leading, spacing: 6) {
                 if message.blocks.isEmpty {
-                    SelectableText(text: message.content, theme: theme)
+                    Text(message.content)
+                        .font(theme.monoFont)
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .id("plain-\(message.content.count)")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                 } else {
                     let textBlocks = message.blocks.filter { if case .text = $0.kind { return true }; return false }
@@ -311,7 +318,13 @@ struct AssistantMessageRow: View {
                             Group {
                                 switch block.kind {
                                 case .text(let text):
-                                    MarkdownText(text: text)
+                                    Text(text)
+                                        .font(theme.monoFont)
+                                        .foregroundStyle(theme.assistantText)
+                                        .textSelection(.enabled)
+                                        .lineLimit(nil)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .id("text-\(text.count)")
                                 case .toolUse(let name, _):
                                     ToolUseCard(name: name, input: block.toolInput)
                                 case .toolResult(let content):
@@ -319,12 +332,6 @@ struct AssistantMessageRow: View {
                                 }
                             }
                             .padding(.horizontal, 12)
-                            .opacity(appeared ? 1.0 : 0.0)
-                            .offset(y: appeared ? 0 : 6)
-                            .animation(
-                                .easeOut(duration: 0.3).delay(Double(index) * 0.06),
-                                value: appeared
-                            )
                         }
                     }
                 }
@@ -384,7 +391,12 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    SelectableText(text: part.text, theme: theme)
+                    Text(renderInline(part.text))
+                        .font(theme.monoFont)
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
