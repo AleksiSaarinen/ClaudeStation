@@ -107,6 +107,8 @@ class TerminalService {
         var buffer = Data()
         var messageCreated = false    // Track on background thread
         var streamingText = ""        // Accumulate current text block
+        var currentTextBlockId: String? // ID of the text block being streamed
+        var allTextParts: [String] = [] // All text blocks for content field
         var resultDuration: Int?
         var resultCost: Double?
 
@@ -215,8 +217,32 @@ class TerminalService {
                        let eventType = event["type"] as? String {
 
                         if eventType == "content_block_start" {
-                            // Reset streaming text for new block
-                            streamingText = ""
+                            if let block = event["content_block"] as? [String: Any],
+                               block["type"] as? String == "text" {
+                                // Save previous text block if any
+                                if !streamingText.isEmpty {
+                                    allTextParts.append(streamingText)
+                                }
+                                streamingText = ""
+                                // Create a new text block with unique ID
+                                let blockId = "text-\(UUID().uuidString)"
+                                currentTextBlockId = blockId
+                                let created = messageCreated
+                                messageCreated = true
+                                DispatchQueue.main.async {
+                                    if created, let last = session.chatMessages.indices.last,
+                                       session.chatMessages[last].role == .assistant {
+                                        session.chatMessages[last].blocks.append(
+                                            ContentBlock(id: blockId, kind: .text(""))
+                                        )
+                                    } else {
+                                        var msg = ChatMessage(role: .assistant, content: "",
+                                                              blocks: [ContentBlock(id: blockId, kind: .text(""))])
+                                        msg.durationSeconds = 0
+                                        session.chatMessages.append(msg)
+                                    }
+                                }
+                            }
                         }
 
                         if eventType == "content_block_delta",
@@ -225,35 +251,34 @@ class TerminalService {
                            deltaType == "text_delta",
                            let text = delta["text"] as? String {
                             streamingText += text
-                            // Dispatch UI update with accumulated text
                             let snapshot = streamingText
-                            let isFirst = !messageCreated
-                            messageCreated = true
+                            let blockId = currentTextBlockId
                             DispatchQueue.main.async {
-                                if isFirst {
-                                    var msg = ChatMessage(role: .assistant, content: snapshot, blocks: [.text(snapshot)])
-                                    msg.durationSeconds = 0
-                                    session.chatMessages.append(msg)
-                                } else if let last = session.chatMessages.indices.last,
-                                          session.chatMessages[last].role == .assistant {
-                                    // Update the last text block with full accumulated text
-                                    let blocks = session.chatMessages[last].blocks
-                                    if let blkIdx = blocks.lastIndex(where: {
-                                        if case .text = $0.kind { return true }; return false
-                                    }) {
-                                        session.chatMessages[last].blocks[blkIdx] = ContentBlock(
-                                            id: session.chatMessages[last].blocks[blkIdx].id,
-                                            kind: .text(snapshot)
-                                        )
-                                    }
-                                    session.chatMessages[last].content = snapshot
+                                guard let last = session.chatMessages.indices.last,
+                                      session.chatMessages[last].role == .assistant,
+                                      let blockId else { return }
+                                // Find and update the specific text block by ID
+                                if let blkIdx = session.chatMessages[last].blocks.firstIndex(where: { $0.id == blockId }) {
+                                    session.chatMessages[last].blocks[blkIdx] = ContentBlock(
+                                        id: blockId, kind: .text(snapshot)
+                                    )
                                 }
+                                // Update content with all text parts combined
+                                let allText = session.chatMessages[last].blocks.compactMap { block -> String? in
+                                    if case .text(let t) = block.kind, !t.isEmpty { return t }
+                                    return nil
+                                }.joined(separator: "\n\n")
+                                session.chatMessages[last].content = allText
                                 session.assistantState = .responding
                             }
                         }
 
                         if eventType == "content_block_stop" {
+                            if !streamingText.isEmpty {
+                                allTextParts.append(streamingText)
+                            }
                             streamingText = ""
+                            currentTextBlockId = nil
                         }
                     }
 
