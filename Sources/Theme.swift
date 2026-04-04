@@ -217,15 +217,23 @@ extension Theme {
 
     /// Available monospaced fonts for the picker
     static let availableMonoFonts = [
-        "Menlo", "SF Mono", "Monaco", "Courier New",
+        "System Mono", "Menlo", "Monaco", "Courier New",
         "JetBrains Mono", "Fira Code", "Source Code Pro",
         "IBM Plex Mono", "Hack", "Inconsolata"
     ]
 
-    /// Font helpers
-    var monoFont: Font { .custom(fontMono, size: 13) }
-    var monoCaptionFont: Font { .custom(fontMono, size: 11) }
-    var monoCaption2Font: Font { .custom(fontMono, size: 10) }
+    /// Resolve NSFont — "System Mono" maps to the system monospaced font
+    func resolvedNSFont(size: CGFloat) -> NSFont {
+        if fontMono == "System Mono" {
+            return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        }
+        return NSFont(name: fontMono, size: size) ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    /// Font helpers — use the same NSFont resolution as SelectableText
+    var monoFont: Font { Font(resolvedNSFont(size: 13)) }
+    var monoCaptionFont: Font { Font(resolvedNSFont(size: 11)) }
+    var monoCaption2Font: Font { Font(resolvedNSFont(size: 10)) }
     var uiFont: Font { fontUI == ".AppleSystemUIFont" ? .body : .custom(fontUI, size: 13) }
     var uiCaptionFont: Font { fontUI == ".AppleSystemUIFont" ? .caption : .custom(fontUI, size: 11) }
     var uiCaption2Font: Font { fontUI == ".AppleSystemUIFont" ? .caption2 : .custom(fontUI, size: 10) }

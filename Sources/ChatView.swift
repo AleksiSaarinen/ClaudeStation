@@ -232,7 +232,7 @@ struct AssistantMessageRow: View {
             // Content blocks
             VStack(alignment: .leading, spacing: 6) {
                 if message.blocks.isEmpty {
-                    SelectableText(text: message.content, fontName: theme.fontMono, textColor: theme.assistantText)
+                    SelectableText(text: message.content, theme: theme)
                         .padding(.horizontal, 12)
                 } else {
                     let textBlocks = message.blocks.filter { if case .text = $0.kind { return true }; return false }
@@ -356,7 +356,7 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    SelectableText(text: part.text, fontName: theme.fontMono, textColor: theme.assistantText)
+                    SelectableText(text: part.text, theme: theme)
                 }
             }
         }
@@ -456,8 +456,7 @@ struct MarkdownText: View {
 
 struct SelectableText: NSViewRepresentable {
     let text: String
-    let fontName: String
-    let textColor: Color
+    let theme: Theme
 
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(wrappingLabelWithString: "")
@@ -473,11 +472,9 @@ struct SelectableText: NSViewRepresentable {
     }
 
     func updateNSView(_ field: NSTextField, context: Context) {
-        let font = NSFont(name: fontName, size: 13) ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        // Use stringValue + direct font/textColor — field editor inherits these correctly
         field.stringValue = text
-        field.font = font
-        field.textColor = NSColor(textColor)
+        field.font = theme.resolvedNSFont(size: 13)
+        field.textColor = NSColor(theme.assistantText)
     }
 }
 
