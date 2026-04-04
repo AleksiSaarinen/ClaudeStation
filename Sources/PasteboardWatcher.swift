@@ -11,11 +11,16 @@ class PasteboardWatcher: ObservableObject {
 
     init() {
         lastChangeCount = NSPasteboard.general.changeCount
-        // Clean up orphaned temp files from previous sessions
+        // Clean up orphaned temp files older than 5 minutes
         let tmp = NSTemporaryDirectory()
         if let files = try? FileManager.default.contentsOfDirectory(atPath: tmp) {
-            for file in files where file.hasPrefix("claudestation_drop_") || file.hasPrefix("claudestation_") && file.hasSuffix(".png") {
-                try? FileManager.default.removeItem(atPath: tmp + file)
+            for file in files where file.hasPrefix("claudestation_drop_") || (file.hasPrefix("claudestation_") && file.hasSuffix(".png")) {
+                let path = tmp + file
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                   let modified = attrs[.modificationDate] as? Date,
+                   Date().timeIntervalSince(modified) > 300 {
+                    try? FileManager.default.removeItem(atPath: path)
+                }
             }
         }
     }
