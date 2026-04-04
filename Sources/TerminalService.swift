@@ -9,6 +9,37 @@ import UserNotifications
 class TerminalService {
     static let shared = TerminalService()
 
+    /// Resolved full path to the claude binary (cached after first lookup)
+    private lazy var resolvedClaudePath: String = {
+        let configured = AppSettings.shared.claudeCodePath
+        // Already a full path
+        if configured.contains("/") {
+            if FileManager.default.isExecutableFile(atPath: configured) { return configured }
+            let expanded = (configured as NSString).expandingTildeInPath
+            if FileManager.default.isExecutableFile(atPath: expanded) { return expanded }
+        }
+        // Try `which` in a login shell to find it on PATH
+        let task = Process()
+        let pipe = Pipe()
+        task.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        task.arguments = ["-l", "-c", "which \(configured)"]
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        try? task.run()
+        task.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let found = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !found.isEmpty, task.terminationStatus == 0 {
+            return found
+        }
+        // Try common locations
+        let home = NSHomeDirectory()
+        for candidate in ["\(home)/.local/bin/\(configured)", "/usr/local/bin/\(configured)", "/opt/homebrew/bin/\(configured)"] {
+            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
+        }
+        return configured
+    }()
+
     // MARK: - Send Message
 
     func send(text: String, to session: Session) {
@@ -80,7 +111,7 @@ class TerminalService {
         let pipe = Pipe()
         let errorPipe = Pipe()
         let escapedText = promptText.replacingOccurrences(of: "'", with: "'\\''")
-        let claudeCmd = ([settings.claudeCodePath] + args.dropLast()).joined(separator: " ")
+        let claudeCmd = ([resolvedClaudePath] + args.dropLast()).joined(separator: " ")
         let fullCmd = "cd '\(workDir)' && \(claudeCmd) '\(escapedText)'"
 
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
