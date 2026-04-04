@@ -31,7 +31,9 @@ struct ChatView: View {
                                     removal: .opacity
                                 ))
                         } else {
-                            AssistantMessageRow(message: message)
+                            let isStreaming = message.id == session.chatMessages.last?.id
+                                && session.assistantState == .responding
+                            AssistantMessageRow(message: message, isStreaming: isStreaming)
                                 .id(message.id)
                                 .transition(.asymmetric(
                                     insertion: .move(edge: .leading).combined(with: .opacity),
@@ -240,6 +242,7 @@ struct UserMessageRow: View {
 
 struct AssistantMessageRow: View {
     let message: ChatMessage
+    var isStreaming: Bool = false
     @Environment(\.theme) var theme
     @State private var appeared = false
     @State private var showThinking = false
@@ -330,6 +333,12 @@ struct AssistantMessageRow: View {
                             .padding(.horizontal, 12)
                         }
                     }
+                }
+
+                // Streaming cursor
+                if isStreaming {
+                    StreamingCursor()
+                        .padding(.horizontal, 12)
                 }
             }
             .padding(.bottom, 10)
@@ -666,6 +675,22 @@ struct ToolResultCard: View {
                     .stroke(theme.toolCardBorder, lineWidth: 1)
             )
         }
+    }
+}
+
+// MARK: - Streaming Cursor
+
+struct StreamingCursor: View {
+    @Environment(\.theme) var theme
+    @State private var visible = true
+
+    var body: some View {
+        Text("▊")
+            .font(.system(size: 13, design: .monospaced))
+            .foregroundStyle(theme.accent)
+            .opacity(visible ? 0.8 : 0.15)
+            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: visible)
+            .onAppear { visible.toggle() }
     }
 }
 
