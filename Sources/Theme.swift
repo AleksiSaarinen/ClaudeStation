@@ -149,7 +149,7 @@ extension Theme {
 
     static let deepSea = Theme(
         id: "deepsea", name: "Deep Sea",
-        chatBg: Color(hex: "#0A1628"),
+        chatBg: Color(hex: "#0A1628"), chatBgGradientEnd: Color(hex: "#061018"),
         userBubble: Color(hex: "#0D4A3A"), userBubbleText: Color(hex: "#00D4AA"),
         assistantBubble: Color(hex: "#0D1B2A"), assistantBubbleBorder: Color(hex: "#1B2D45"), assistantText: Color(hex: "#C0D8E8"),
         toolCardBg: Color(hex: "#0B1724"), toolCardBorder: Color(hex: "#1B2D45"), toolCardText: Color(hex: "#00D4AA"),
