@@ -3,25 +3,26 @@ import AppKit
 
 // MARK: - Pet State
 
-enum PetState: String {
+enum PetState: String, Equatable {
     case idle, coding, thinking, reading, searching, testing, deploying, success, error, sleepy
 
     var frameCount: Int {
         switch self {
-        case .idle, .thinking, .searching, .sleepy, .deploying: return 6
-        case .coding, .testing: return 8
-        case .reading, .success, .error: return 4
+        case .idle, .coding, .testing, .sleepy: return 10
+        case .thinking, .success, .error, .searching, .reading, .deploying: return 8
         }
     }
 
     var frameDuration: Double {
         switch self {
-        case .idle, .sleepy: return 0.25    // 4fps
-        case .reading: return 0.2
-        case .thinking, .deploying: return 0.18
-        case .searching: return 0.16
-        case .success, .error: return 0.15
-        case .coding, .testing: return 0.12  // 8fps
+        case .idle: return 0.18
+        case .sleepy: return 0.25
+        case .coding, .testing: return 0.10
+        case .thinking, .deploying: return 0.16
+        case .searching: return 0.15
+        case .reading: return 0.22
+        case .success: return 0.12
+        case .error: return 0.10
         }
     }
 
@@ -32,45 +33,17 @@ enum PetState: String {
         }
     }
 
-    /// Map from session status + tool info to pet state
-    static func from(sessionStatus: SessionStatus, lastToolName: String?) -> PetState {
-        switch sessionStatus {
-        case .running:
-            guard let tool = lastToolName else { return .thinking }
-            switch tool {
-            case "Read": return .reading
-            case "Grep", "Glob": return .searching
-            case "Bash": return .coding  // Will be refined by command content
-            case "Write", "Edit": return .coding
-            case "Agent": return .thinking
-            default: return .coding
-            }
-        case .waitingForInput: return .idle
-        case .idle: return .idle
-        case .error: return .error
-        }
-    }
-
-    /// Refine Bash state by command content
     static func refineBash(command: String) -> PetState {
         let cmd = command.lowercased()
-        if cmd.contains("test") || cmd.contains("jest") || cmd.contains("pytest") || cmd.contains("vitest") {
-            return .testing
-        }
-        if cmd.contains("git push") || cmd.contains("git commit") || cmd.contains("git merge") ||
-           cmd.contains("deploy") || cmd.contains("publish") {
-            return .deploying
-        }
-        if cmd.contains("grep") || cmd.contains("find") || cmd.contains("search") || cmd.contains("rg ") {
-            return .searching
-        }
+        if cmd.contains("test") || cmd.contains("jest") || cmd.contains("pytest") || cmd.contains("vitest") { return .testing }
+        if cmd.contains("git push") || cmd.contains("git commit") || cmd.contains("deploy") || cmd.contains("publish") { return .deploying }
+        if cmd.contains("grep") || cmd.contains("find ") || cmd.contains("search") || cmd.contains("rg ") { return .searching }
         return .coding
     }
 }
 
 // MARK: - Pet Frame Cache
 
-/// Loads and caches pet sprite frames from the Resources/PetFrames directory
 class PetFrameCache {
     static let shared = PetFrameCache()
     private var frames: [String: [NSImage]] = [:]
@@ -79,22 +52,12 @@ class PetFrameCache {
         if let cached = frames[state.rawValue] { return cached }
 
         var loaded: [NSImage] = []
+        let resourcePath = Bundle.main.resourcePath ?? ""
         for i in 0..<state.frameCount {
-            let name = "\(state.rawValue)_\(i)"
-            if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "PetFrames"),
-               let image = NSImage(contentsOf: url) {
+            let path = "\(resourcePath)/PetFrames/\(state.rawValue)_\(i).png"
+            if let image = NSImage(contentsOfFile: path) {
+                image.size = NSSize(width: 120, height: 120) // Ensure consistent size
                 loaded.append(image)
-            }
-        }
-
-        // Fallback: try loading from Resources directory directly
-        if loaded.isEmpty {
-            let resourcePath = Bundle.main.resourcePath ?? ""
-            for i in 0..<state.frameCount {
-                let path = "\(resourcePath)/PetFrames/\(state.rawValue)_\(i).png"
-                if let image = NSImage(contentsOfFile: path) {
-                    loaded.append(image)
-                }
             }
         }
 
@@ -109,13 +72,13 @@ struct PetView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
 
-    @State private var currentFrame = 0
     @State private var currentState: PetState = .idle
+    @State private var currentFrame = 0
     @State private var timer: Timer?
     @State private var idleSince = Date()
-    @State private var oneShotComplete = false
+    @State private var oneShotDone = false
 
-    private let size: CGFloat = 32
+    private let size: CGFloat = 36
 
     var body: some View {
         let frames = PetFrameCache.shared.framesFor(state: currentState)
@@ -124,22 +87,23 @@ struct PetView: View {
         Group {
             if !frames.isEmpty && currentFrame < frames.count {
                 Image(nsImage: frames[currentFrame])
-                    .interpolation(.none)  // Keep pixel art crisp
+                    .interpolation(.none)
                     .resizable()
                     .frame(width: size, height: size)
             } else {
-                // Fallback: simple colored circle
-                Circle()
-                    .fill(theme.accent)
-                    .frame(width: size * 0.6, height: size * 0.6)
+                // Fallback
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(theme.accent.opacity(0.3))
+                    .frame(width: size, height: size)
             }
         }
-        .colorMultiply(isActive ? .white : theme.accent)
+        .colorMultiply(isActive ? .white : theme.accent.opacity(0.8))
         .animation(.easeInOut(duration: 0.3), value: isActive)
-        .onAppear { updateState(); startTimer() }
+        .onAppear { updateState(); startAnimation() }
         .onDisappear { timer?.invalidate(); timer = nil }
         .onChange(of: session.status) { _, _ in updateState() }
         .onChange(of: session.assistantState) { _, _ in updateState() }
+        .onChange(of: session.lastToolName) { _, _ in updateState() }
     }
 
     private func updateState() {
@@ -148,18 +112,13 @@ struct PetView: View {
         switch session.status {
         case .running:
             if let tool = session.lastToolName {
-                if tool == "Read" {
-                    newState = .reading
-                } else if tool == "Grep" || tool == "Glob" {
-                    newState = .searching
-                } else if tool == "Bash", let cmd = session.lastToolCommand {
-                    newState = PetState.refineBash(command: cmd)
-                } else if tool == "Write" || tool == "Edit" {
-                    newState = .coding
-                } else if tool == "Agent" {
-                    newState = .thinking
-                } else {
-                    newState = .coding
+                switch tool {
+                case "Read": newState = .reading
+                case "Grep", "Glob": newState = .searching
+                case "Bash": newState = PetState.refineBash(command: session.lastToolCommand ?? "")
+                case "Write", "Edit": newState = .coding
+                case "Agent": newState = .thinking
+                default: newState = .coding
                 }
             } else if case .responding = session.assistantState {
                 newState = .thinking
@@ -169,57 +128,48 @@ struct PetView: View {
             idleSince = Date()
 
         case .waitingForInput:
-            let idleTime = Date().timeIntervalSince(idleSince)
-            newState = idleTime > 120 ? .sleepy : .idle
+            newState = Date().timeIntervalSince(idleSince) > 120 ? .sleepy : .idle
 
-        case .error:
-            newState = .error
-
-        case .idle:
-            newState = .idle
+        case .error: newState = .error
+        case .idle: newState = .idle
         }
 
         if newState != currentState {
             currentState = newState
             currentFrame = 0
-            oneShotComplete = false
-            startTimer()
+            oneShotDone = false
+            startAnimation()
         }
     }
 
-    private func startTimer() {
+    private func startAnimation() {
         timer?.invalidate()
         let state = currentState
         timer = Timer.scheduledTimer(withTimeInterval: state.frameDuration, repeats: true) { _ in
-            let frames = PetFrameCache.shared.framesFor(state: state)
-            guard !frames.isEmpty else { return }
+            let count = PetFrameCache.shared.framesFor(state: state).count
+            guard count > 0 else { return }
 
             if state.loops {
-                currentFrame = (currentFrame + 1) % frames.count
-            } else {
-                if currentFrame < frames.count - 1 {
-                    currentFrame += 1
-                } else if !oneShotComplete {
-                    oneShotComplete = true
-                    // Transition to idle after one-shot animation
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        if currentState == state {
-                            currentState = .idle
-                            currentFrame = 0
-                            startTimer()
-                        }
+                currentFrame = (currentFrame + 1) % count
+            } else if currentFrame < count - 1 {
+                currentFrame += 1
+            } else if !oneShotDone {
+                oneShotDone = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if currentState == state {
+                        currentState = .idle
+                        currentFrame = 0
+                        startAnimation()
                     }
                 }
             }
 
-            // Check for sleepy transition while idle
-            if currentState == .idle && session.status == .waitingForInput {
-                let idleTime = Date().timeIntervalSince(idleSince)
-                if idleTime > 120 && currentState != .sleepy {
-                    currentState = .sleepy
-                    currentFrame = 0
-                    startTimer()
-                }
+            // Sleepy check
+            if currentState == .idle && session.status == .waitingForInput &&
+               Date().timeIntervalSince(idleSince) > 120 {
+                currentState = .sleepy
+                currentFrame = 0
+                startAnimation()
             }
         }
     }
