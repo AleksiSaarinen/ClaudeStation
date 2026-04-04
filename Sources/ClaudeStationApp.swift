@@ -14,7 +14,7 @@ struct ClaudeStationApp: App {
                 .environmentObject(sessionManager)
                 .environment(\.theme, activeTheme)
                 .id(selectedThemeId + customMonoFont)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 350, minHeight: 300)
                 .onOpenURL { url in
                     handleURL(url)
                 }

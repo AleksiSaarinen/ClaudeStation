@@ -165,6 +165,9 @@ struct SessionDetailView: View {
             inputFocused = true
             pasteboardWatcher.startWatching()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            inputFocused = true
+        }
         .onDisappear { pasteboardWatcher.stopWatching() }
         // Bridge session status changes to the minigame
         .onChange(of: session.status) { oldStatus, newStatus in

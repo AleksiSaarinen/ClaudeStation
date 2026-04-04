@@ -242,6 +242,9 @@ class TerminalService {
             session.status = .waitingForInput
             session.assistantState = .idle
 
+            // Trigger save after response completes
+            NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
+
             if !session.messageQueue.isEmpty {
                 self.processNextInQueue(for: session)
             }

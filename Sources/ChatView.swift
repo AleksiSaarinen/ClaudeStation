@@ -50,6 +50,17 @@ struct ChatView: View {
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
             .background(theme.chatBg)
+            .onAppear {
+                // Double scroll: first gets close, second reaches actual bottom
+                // after LazyVStack lays out remaining content
+                proxy.scrollTo("bottom", anchor: .bottom)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
             .onChange(of: session.chatMessages.count) { _, _ in
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     withAnimation(.easeOut(duration: 0.3)) {
@@ -165,6 +176,7 @@ struct AssistantMessageRow: View {
                         .font(theme.monoFont)
                         .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                 } else {
                     ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
@@ -221,6 +233,7 @@ struct MarkdownText: View {
             .font(theme.monoFont)
             .foregroundStyle(theme.assistantText)
             .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var rendered: AttributedString {

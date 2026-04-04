@@ -15,6 +15,8 @@ class SessionManager: ObservableObject {
     
     private var saveDebounce: DispatchWorkItem?
 
+    private var saveObserver: Any?
+
     init() {
         // Restore saved sessions or start fresh
         let restored = SessionPersistence.load()
@@ -23,6 +25,13 @@ class SessionManager: ObservableObject {
         } else {
             sessions = restored
             activeSessionId = sessions.first?.id
+        }
+
+        // Listen for save triggers from TerminalService
+        saveObserver = NotificationCenter.default.addObserver(
+            forName: .init("ClaudeStationSave"), object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.scheduleSave()
         }
     }
 
