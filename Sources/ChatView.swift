@@ -318,13 +318,8 @@ struct AssistantMessageRow: View {
                             Group {
                                 switch block.kind {
                                 case .text(let text):
-                                    Text(text)
-                                        .font(theme.monoFont)
-                                        .foregroundStyle(theme.assistantText)
-                                        .textSelection(.enabled)
-                                        .lineLimit(nil)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .id("text-\(text.count)")
+                                    MarkdownText(text: text)
+                                        .id("md-\(text.count)")
                                 case .toolUse(let name, _):
                                     ToolUseCard(name: name, input: block.toolInput)
                                 case .toolResult(let content):
@@ -395,8 +390,10 @@ struct MarkdownText: View {
                         .font(theme.monoFont)
                         .foregroundStyle(theme.assistantText)
                         .textSelection(.enabled)
+                        .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .id("inline-\(part.text.count)")
                 }
             }
         }
