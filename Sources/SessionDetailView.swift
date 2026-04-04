@@ -52,7 +52,7 @@ struct SessionDetailView: View {
                         if let path = pasteboardWatcher.pendingImagePath {
                             let prefix = message.isEmpty ? "" : "\n"
                             message += "\(prefix)[Image: \(path)]"
-                            pasteboardWatcher.clear()
+                            pasteboardWatcher.clearForSend() // keep the file — Claude needs to read it
                         }
                         if session.status == .waitingForInput || session.status == .idle {
                             sessionManager.sendImmediately(message, to: session)
