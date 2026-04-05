@@ -102,26 +102,39 @@ struct SessionDetailView: View {
             }
             .onDrop(of: [.image, .fileURL], isTargeted: $isDragOver) { providers in
                 for provider in providers {
-                    provider.loadObject(ofClass: NSImage.self) { image, _ in
-                        guard let image = image as? NSImage else { return }
-                        let path = NSTemporaryDirectory() + "claudestation_drop_\(Int(Date().timeIntervalSince1970)).png"
-                        if let tiff = image.tiffRepresentation,
-                           let bmp = NSBitmapImageRep(data: tiff),
-                           let png = bmp.representation(using: .png, properties: [:]) {
-                            try? png.write(to: URL(fileURLWithPath: path))
+                    // Try image first
+                    if provider.hasItemConformingToTypeIdentifier("public.image") {
+                        provider.loadObject(ofClass: NSImage.self) { image, _ in
+                            guard let image = image as? NSImage else { return }
+                            let path = NSTemporaryDirectory() + "claudestation_drop_\(Int(Date().timeIntervalSince1970)).png"
+                            if let tiff = image.tiffRepresentation,
+                               let bmp = NSBitmapImageRep(data: tiff),
+                               let png = bmp.representation(using: .png, properties: [:]) {
+                                try? png.write(to: URL(fileURLWithPath: path))
+                                DispatchQueue.main.async {
+                                    self.pasteboardWatcher.pendingImage = image
+                                    self.pasteboardWatcher.pendingImagePath = path
+                                }
+                            }
+                        }
+                    }
+                    // Handle file URLs — any file or folder
+                    provider.loadObject(ofClass: URL.self) { url, _ in
+                        guard let url = url else { return }
+                        // If it's an image, the handler above already got it
+                        if let image = NSImage(contentsOf: url), image.size.width > 10 {
+                            let path = NSTemporaryDirectory() + "claudestation_drop_\(url.lastPathComponent)"
+                            try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: path))
                             DispatchQueue.main.async {
                                 self.pasteboardWatcher.pendingImage = image
                                 self.pasteboardWatcher.pendingImagePath = path
                             }
-                        }
-                    }
-                    provider.loadObject(ofClass: URL.self) { url, _ in
-                        guard let url = url, let image = NSImage(contentsOf: url) else { return }
-                        let path = NSTemporaryDirectory() + "claudestation_drop_\(url.lastPathComponent)"
-                        try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: path))
-                        DispatchQueue.main.async {
-                            self.pasteboardWatcher.pendingImage = image
-                            self.pasteboardWatcher.pendingImagePath = path
+                        } else {
+                            // Non-image file or folder — add path to input
+                            DispatchQueue.main.async {
+                                let sep = self.inputText.isEmpty ? "" : "\n"
+                                self.inputText += "\(sep)[File: \(url.path)]"
+                            }
                         }
                     }
                 }

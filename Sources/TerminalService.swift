@@ -55,6 +55,8 @@ class TerminalService {
         // The [Image: path] marker is stripped and replaced with an instruction
         // to use the Read tool on the file, since `claude -p` has no --image flag.
         var promptText = text
+
+        // Extract [Image: path] → instruct Claude to Read the image
         if let range = text.range(of: "\\[Image: [^\\]]+\\]", options: .regularExpression),
            let pathRange = text.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression) {
             let imagePath = String(text[pathRange])
@@ -64,6 +66,18 @@ class TerminalService {
             } else {
                 promptText = "Read and look at the image file at \(imagePath). \(userText)"
             }
+        }
+
+        // Extract [File: path] → instruct Claude to Read the file/folder
+        while let range = promptText.range(of: "\\[File: [^\\]]+\\]", options: .regularExpression),
+              let pathRange = promptText.range(of: "(?<=\\[File: )[^\\]]+", options: .regularExpression) {
+            let filePath = String(promptText[pathRange])
+            var isDir: ObjCBool = false
+            FileManager.default.fileExists(atPath: filePath, isDirectory: &isDir)
+            let instruction = isDir.boolValue
+                ? "The user dragged in the folder at \(filePath). Use it as context."
+                : "The user dragged in the file at \(filePath). Read it and use it as context."
+            promptText = promptText.replacingCharacters(in: range, with: instruction)
         }
 
         // Record user message (original text so [Image:] shows in chat)
