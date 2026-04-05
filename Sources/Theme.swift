@@ -46,9 +46,18 @@ struct Theme: Identifiable, Equatable {
     static func == (lhs: Theme, rhs: Theme) -> Bool { lhs.id == rhs.id }
 
     /// Background view — animated gradient if configured, solid color otherwise
+    @ViewBuilder func chatBackground(toolName: String? = nil, isRunning: Bool = false) -> some View {
+        if chatBgGradientEnd != nil {
+            AnimatedGradientBackground(theme: self, toolName: toolName, isRunning: isRunning)
+        } else {
+            chatBg
+        }
+    }
+
+    /// Static background for places that don't have session context
     @ViewBuilder var chatBackground: some View {
         if chatBgGradientEnd != nil {
-            AnimatedGradientBackground(theme: self)
+            AnimatedGradientBackground(theme: self, toolName: nil, isRunning: false)
         } else {
             chatBg
         }
@@ -59,6 +68,8 @@ struct Theme: Identifiable, Equatable {
 
 struct AnimatedGradientBackground: View {
     let theme: Theme
+    var toolName: String?
+    var isRunning: Bool
     @State private var particles: [Particle] = []
     @State private var initialized = false
 
@@ -69,9 +80,35 @@ struct AnimatedGradientBackground: View {
         var opacity: Double
         var speedX: Double
         var speedY: Double
-        var phase: Double       // for oscillation
+        var phase: Double
         var phaseSpeed: Double
-        var life: Double        // 0…1, fades in/out near edges
+        var life: Double
+    }
+
+    /// Accent color shifts based on what Claude is doing
+    private var activityColor: NSColor {
+        guard isRunning, let tool = toolName else {
+            return NSColor(theme.accent)
+        }
+        switch tool {
+        case "Read":                return NSColor(Color(hex: "#60A5FA")) // blue — reading
+        case "Write", "Edit":      return NSColor(Color(hex: "#34D399")) // green — writing
+        case "Bash":               return NSColor(Color(hex: "#FBBF24")) // amber — executing
+        case "Grep", "Glob":       return NSColor(Color(hex: "#A78BFA")) // purple — searching
+        case "Agent":              return NSColor(Color(hex: "#F472B6")) // pink — thinking
+        case "WebSearch","WebFetch":return NSColor(Color(hex: "#38BDF8")) // cyan — web
+        default:                   return NSColor(theme.accent)
+        }
+    }
+
+    /// Particle speed multiplier based on activity
+    private var speedMult: Double {
+        isRunning ? 1.8 : 1.0
+    }
+
+    /// Blob opacity changes with activity
+    private var blobOpacity: Double {
+        isRunning ? 0.10 : 0.06
     }
 
     var body: some View {
@@ -93,7 +130,7 @@ struct AnimatedGradientBackground: View {
 
                 // Moving gradient blobs
                 let blobRadius = min(size.width, size.height) * 0.5
-                let blobColor = theme.accent.opacity(0.06)
+                let blobColor = Color(nsColor: activityColor.withAlphaComponent(blobOpacity))
                 let blobs: [(Double, Double, Double, Double)] = [
                     (0.25, 0.2, 0.7, 0.5),
                     (0.75, 0.7, 0.6, 0.8),
@@ -101,8 +138,8 @@ struct AnimatedGradientBackground: View {
                     (0.3,  0.8, 0.5, 0.6),
                 ]
                 for (bx, by, fx, fy) in blobs {
-                    let cx = size.width * (bx + 0.2 * sin(t * 0.05 * fx))
-                    let cy = size.height * (by + 0.15 * cos(t * 0.05 * fy))
+                    let cx = size.width * (bx + 0.2 * sin(t * 0.05 * fx * speedMult))
+                    let cy = size.height * (by + 0.15 * cos(t * 0.05 * fy * speedMult))
                     context.fill(
                         Path(ellipseIn: CGRect(
                             x: cx - blobRadius, y: cy - blobRadius,
@@ -118,13 +155,13 @@ struct AnimatedGradientBackground: View {
                 }
 
                 // Particles
-                let accentColor = NSColor(theme.accent)
+                let accentColor = activityColor
                 for i in particles.indices {
                     var p = particles[i]
                     let elapsed = t * p.phaseSpeed
-                    let px = (p.x + p.speedX * t + sin(elapsed + p.phase) * 0.02)
+                    let px = (p.x + p.speedX * t * speedMult + sin(elapsed + p.phase) * 0.02)
                         .truncatingRemainder(dividingBy: 1.1)
-                    let py = (p.y - p.speedY * t + cos(elapsed + p.phase) * 0.015)
+                    let py = (p.y - p.speedY * t * speedMult + cos(elapsed + p.phase) * 0.015)
                         .truncatingRemainder(dividingBy: 1.1)
                     // Wrap around
                     let wx = px < -0.05 ? px + 1.15 : px
@@ -344,7 +381,22 @@ extension Theme {
         fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
     )
 
-    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet]
+    static let neon = Theme(
+        id: "neon", name: "Neon",
+        chatBg: Color(hex: "#0A0A0F"), chatBgGradientEnd: Color(hex: "#050510"),
+        userBubble: Color(hex: "#FF3CAC"), userBubbleText: .white,
+        assistantBubble: Color(hex: "#0E0E1A"), assistantBubbleBorder: Color(hex: "#1A1A30"), assistantText: Color(hex: "#F0F0FF"),
+        toolCardBg: Color(hex: "#0A0A14"), toolCardBorder: Color(hex: "#1A1A30"), toolCardText: Color(hex: "#B0B0D0"),
+        accent: Color(hex: "#FF3CAC"),
+        chromeBar: Color(hex: "#0E0E1A"), chromeBorder: Color(hex: "#1A1A30"), chromeText: Color(hex: "#7070A0"),
+        inputBg: Color(hex: "#0E0E1A"), inputBorder: Color(hex: "#1A1A30"),
+        mutedText: Color(hex: "#4A4A70"), successDot: Color(hex: "#00FF88"),
+        costText: Color(hex: "#4A4A70"), timestampText: Color(hex: "#4A4A70"),
+        promptChar: "▸", promptColor: Color(hex: "#FF3CAC"),
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 10
+    )
+
+    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon]
 
     static func byId(_ id: String) -> Theme {
         all.first { $0.id == id } ?? midnight

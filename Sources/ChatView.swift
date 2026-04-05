@@ -123,7 +123,10 @@ struct ChatView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
         } // ZStack
-        .background(theme.chatBackground)
+        .background(theme.chatBackground(
+            toolName: session.lastToolName,
+            isRunning: session.status == .running
+        ))
         .animation(.easeInOut(duration: 0.2), value: isAtBottom)
     }
 
