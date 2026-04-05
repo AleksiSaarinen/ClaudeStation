@@ -72,6 +72,7 @@ struct AnimatedGradientBackground: View {
     var isRunning: Bool
     @State private var particles: [Particle] = []
     @State private var initialized = false
+    @State private var startTime: Date = .now
 
     struct Particle {
         var x: Double
@@ -112,8 +113,8 @@ struct AnimatedGradientBackground: View {
     }
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSince(startTime)
             Canvas { context, size in
                 let base = theme.chatBg
                 let end = theme.chatBgGradientEnd ?? theme.chatBg
@@ -157,15 +158,15 @@ struct AnimatedGradientBackground: View {
                 // Particles
                 let accentColor = activityColor
                 for i in particles.indices {
-                    var p = particles[i]
+                    let p = particles[i]
                     let elapsed = t * p.phaseSpeed
-                    let px = (p.x + p.speedX * t * speedMult + sin(elapsed + p.phase) * 0.02)
-                        .truncatingRemainder(dividingBy: 1.1)
-                    let py = (p.y - p.speedY * t * speedMult + cos(elapsed + p.phase) * 0.015)
-                        .truncatingRemainder(dividingBy: 1.1)
-                    // Wrap around
-                    let wx = px < -0.05 ? px + 1.15 : px
-                    let wy = py < -0.05 ? py + 1.15 : py
+                    // Position wraps 0…1 using modulo
+                    var wx = (p.x + p.speedX * t * speedMult + sin(elapsed + p.phase) * 0.02)
+                        .truncatingRemainder(dividingBy: 1.0)
+                    var wy = (p.y - p.speedY * t * speedMult + cos(elapsed + p.phase) * 0.015)
+                        .truncatingRemainder(dividingBy: 1.0)
+                    if wx < 0 { wx += 1.0 }
+                    if wy < 0 { wy += 1.0 }
 
                     // Fade near edges
                     let edgeFade = min(
@@ -206,6 +207,7 @@ struct AnimatedGradientBackground: View {
         .onAppear {
             guard !initialized else { return }
             initialized = true
+            startTime = .now
             particles = (0..<25).map { _ in
                 Particle(
                     x: Double.random(in: 0...1),
