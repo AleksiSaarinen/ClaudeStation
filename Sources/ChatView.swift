@@ -245,7 +245,7 @@ struct AssistantMessageRow: View {
     var isStreaming: Bool = false
     @Environment(\.theme) var theme
     @State private var appeared = false
-    @State private var showThinking = false
+    @State private var showThinking = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
