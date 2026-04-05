@@ -55,66 +55,140 @@ struct Theme: Identifiable, Equatable {
     }
 }
 
-// MARK: - Animated Gradient Background
+// MARK: - Animated Gradient Background with Particles
 
 struct AnimatedGradientBackground: View {
     let theme: Theme
-    @State private var phase: CGFloat = 0
+    @State private var particles: [Particle] = []
+    @State private var initialized = false
+
+    struct Particle {
+        var x: Double
+        var y: Double
+        var size: Double
+        var opacity: Double
+        var speedX: Double
+        var speedY: Double
+        var phase: Double       // for oscillation
+        var phaseSpeed: Double
+        var life: Double        // 0…1, fades in/out near edges
+    }
 
     var body: some View {
-        let base = theme.chatBg
-        let end = theme.chatBgGradientEnd ?? theme.chatBg
-        let accent = theme.accent.opacity(0.08)
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                let base = theme.chatBg
+                let end = theme.chatBgGradientEnd ?? theme.chatBg
 
-        Canvas { context, size in
-            // Base gradient
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .linearGradient(
-                    Gradient(colors: [base, end]),
-                    startPoint: .zero,
-                    endPoint: CGPoint(x: 0, y: size.height)
-                )
-            )
-
-            // Animated accent blobs
-            let t = phase
-            let blob1 = CGPoint(
-                x: size.width * (0.3 + 0.2 * cos(t * 0.7)),
-                y: size.height * (0.2 + 0.15 * sin(t * 0.5))
-            )
-            let blob2 = CGPoint(
-                x: size.width * (0.7 + 0.2 * sin(t * 0.6)),
-                y: size.height * (0.7 + 0.15 * cos(t * 0.8))
-            )
-            let blob3 = CGPoint(
-                x: size.width * (0.5 + 0.25 * sin(t * 0.4 + 2)),
-                y: size.height * (0.5 + 0.2 * cos(t * 0.3 + 1))
-            )
-
-            let radius = min(size.width, size.height) * 0.45
-
-            for center in [blob1, blob2, blob3] {
+                // Base gradient
                 context.fill(
-                    Path(ellipseIn: CGRect(
-                        x: center.x - radius, y: center.y - radius,
-                        width: radius * 2, height: radius * 2
-                    )),
-                    with: .radialGradient(
-                        Gradient(colors: [accent, .clear]),
-                        center: center,
-                        startRadius: 0,
-                        endRadius: radius
+                    Path(CGRect(origin: .zero, size: size)),
+                    with: .linearGradient(
+                        Gradient(colors: [base, end]),
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: 0, y: size.height)
                     )
                 )
+
+                // Moving gradient blobs
+                let blobRadius = min(size.width, size.height) * 0.5
+                let blobColor = theme.accent.opacity(0.06)
+                let blobs: [(Double, Double, Double, Double)] = [
+                    (0.25, 0.2, 0.7, 0.5),
+                    (0.75, 0.7, 0.6, 0.8),
+                    (0.5,  0.5, 0.4, 0.3),
+                    (0.3,  0.8, 0.5, 0.6),
+                ]
+                for (bx, by, fx, fy) in blobs {
+                    let cx = size.width * (bx + 0.2 * sin(t * 0.05 * fx))
+                    let cy = size.height * (by + 0.15 * cos(t * 0.05 * fy))
+                    context.fill(
+                        Path(ellipseIn: CGRect(
+                            x: cx - blobRadius, y: cy - blobRadius,
+                            width: blobRadius * 2, height: blobRadius * 2
+                        )),
+                        with: .radialGradient(
+                            Gradient(colors: [blobColor, .clear]),
+                            center: CGPoint(x: cx, y: cy),
+                            startRadius: 0,
+                            endRadius: blobRadius
+                        )
+                    )
+                }
+
+                // Particles
+                let accentColor = NSColor(theme.accent)
+                for i in particles.indices {
+                    var p = particles[i]
+                    let elapsed = t * p.phaseSpeed
+                    let px = (p.x + p.speedX * t + sin(elapsed + p.phase) * 0.02)
+                        .truncatingRemainder(dividingBy: 1.1)
+                    let py = (p.y - p.speedY * t + cos(elapsed + p.phase) * 0.015)
+                        .truncatingRemainder(dividingBy: 1.1)
+                    // Wrap around
+                    let wx = px < -0.05 ? px + 1.15 : px
+                    let wy = py < -0.05 ? py + 1.15 : py
+
+                    // Fade near edges
+                    let edgeFade = min(
+                        min(wx, 1.0 - wx) * 8,
+                        min(wy, 1.0 - wy) * 8
+                    ).clamped(to: 0...1)
+                    // Twinkle
+                    let twinkle = 0.5 + 0.5 * sin(t * p.phaseSpeed * 2 + p.phase)
+                    let alpha = p.opacity * edgeFade * twinkle
+
+                    let screenX = wx * size.width
+                    let screenY = wy * size.height
+                    let r = p.size
+
+                    // Glow
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: screenX - r * 2, y: screenY - r * 2, width: r * 4, height: r * 4)),
+                        with: .radialGradient(
+                            Gradient(colors: [
+                                Color(nsColor: accentColor.withAlphaComponent(alpha * 0.3)),
+                                .clear
+                            ]),
+                            center: CGPoint(x: screenX, y: screenY),
+                            startRadius: 0,
+                            endRadius: r * 2
+                        )
+                    )
+
+                    // Core dot
+                    context.fill(
+                        Path(ellipseIn: CGRect(x: screenX - r/2, y: screenY - r/2, width: r, height: r)),
+                        with: .color(Color(nsColor: accentColor.withAlphaComponent(alpha * 0.8)))
+                    )
+                }
             }
         }
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(.linear(duration: 30).repeatForever(autoreverses: false)) {
-                phase = .pi * 2
+            guard !initialized else { return }
+            initialized = true
+            particles = (0..<25).map { _ in
+                Particle(
+                    x: Double.random(in: 0...1),
+                    y: Double.random(in: 0...1),
+                    size: Double.random(in: 1.5...3.5),
+                    opacity: Double.random(in: 0.3...0.8),
+                    speedX: Double.random(in: -0.003...0.003),
+                    speedY: Double.random(in: 0.002...0.008),
+                    phase: Double.random(in: 0...(.pi * 2)),
+                    phaseSpeed: Double.random(in: 0.3...1.2),
+                    life: 1.0
+                )
             }
         }
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
 
