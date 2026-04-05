@@ -61,9 +61,9 @@ struct InlineQueueStrip: View {
                         .padding(.leading, 4)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(theme.chromeBar)
+            .background(theme.chromeBar.opacity(0.9))
         }
         .animation(.easeInOut(duration: 0.15), value: session.messageQueue.count)
     }
@@ -99,19 +99,23 @@ struct QueuePill: View {
 
             Spacer(minLength: 4)
 
-            if hovering {
-                Button(action: onSendNow) {
-                    Image(systemName: "paperplane.fill").font(.caption2)
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(theme.accent)
-
-                Button(action: onDelete) {
-                    Image(systemName: "xmark").font(.caption2)
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(theme.mutedText)
+            // Always visible — send now and delete
+            Button(action: onSendNow) {
+                Text("Send")
+                    .font(.caption2.bold())
+                    .foregroundStyle(theme.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(theme.accent.opacity(0.12))
+                    .clipShape(Capsule())
             }
+            .buttonStyle(.borderless)
+
+            Button(action: onDelete) {
+                Image(systemName: "xmark").font(.caption2)
+                    .foregroundStyle(theme.mutedText)
+            }
+            .buttonStyle(.borderless)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -123,6 +127,5 @@ struct QueuePill: View {
             RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 4))
                 .strokeBorder(isNext ? theme.accent.opacity(0.2) : theme.toolCardBorder, lineWidth: 1)
         )
-        .onHover { hovering = $0 }
     }
 }
