@@ -92,7 +92,7 @@ class TerminalService {
 
         // Build claude command
         let settings = AppSettings.shared
-        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "claude-opus-4-6"]
 
         // Plan mode takes precedence over bypass permissions
         if session.planMode {
