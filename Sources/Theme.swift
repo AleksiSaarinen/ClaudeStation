@@ -45,12 +45,75 @@ struct Theme: Identifiable, Equatable {
 
     static func == (lhs: Theme, rhs: Theme) -> Bool { lhs.id == rhs.id }
 
-    /// Background view — gradient if configured, solid color otherwise
+    /// Background view — animated gradient if configured, solid color otherwise
     @ViewBuilder var chatBackground: some View {
-        if let end = chatBgGradientEnd {
-            LinearGradient(colors: [chatBg, end], startPoint: .top, endPoint: .bottom)
+        if chatBgGradientEnd != nil {
+            AnimatedGradientBackground(theme: self)
         } else {
             chatBg
+        }
+    }
+}
+
+// MARK: - Animated Gradient Background
+
+struct AnimatedGradientBackground: View {
+    let theme: Theme
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        let base = theme.chatBg
+        let end = theme.chatBgGradientEnd ?? theme.chatBg
+        let accent = theme.accent.opacity(0.08)
+
+        Canvas { context, size in
+            // Base gradient
+            context.fill(
+                Path(CGRect(origin: .zero, size: size)),
+                with: .linearGradient(
+                    Gradient(colors: [base, end]),
+                    startPoint: .zero,
+                    endPoint: CGPoint(x: 0, y: size.height)
+                )
+            )
+
+            // Animated accent blobs
+            let t = phase
+            let blob1 = CGPoint(
+                x: size.width * (0.3 + 0.2 * cos(t * 0.7)),
+                y: size.height * (0.2 + 0.15 * sin(t * 0.5))
+            )
+            let blob2 = CGPoint(
+                x: size.width * (0.7 + 0.2 * sin(t * 0.6)),
+                y: size.height * (0.7 + 0.15 * cos(t * 0.8))
+            )
+            let blob3 = CGPoint(
+                x: size.width * (0.5 + 0.25 * sin(t * 0.4 + 2)),
+                y: size.height * (0.5 + 0.2 * cos(t * 0.3 + 1))
+            )
+
+            let radius = min(size.width, size.height) * 0.45
+
+            for center in [blob1, blob2, blob3] {
+                context.fill(
+                    Path(ellipseIn: CGRect(
+                        x: center.x - radius, y: center.y - radius,
+                        width: radius * 2, height: radius * 2
+                    )),
+                    with: .radialGradient(
+                        Gradient(colors: [accent, .clear]),
+                        center: center,
+                        startRadius: 0,
+                        endRadius: radius
+                    )
+                )
+            }
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            withAnimation(.linear(duration: 30).repeatForever(autoreverses: false)) {
+                phase = .pi * 2
+            }
         }
     }
 }
