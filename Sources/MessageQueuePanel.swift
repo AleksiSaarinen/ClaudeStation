@@ -42,13 +42,14 @@ struct InlineQueueStrip: View {
                     .buttonStyle(.borderless)
                 }
 
-                let messages = expanded ? session.messageQueue : Array(session.messageQueue.prefix(3))
-                ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                let count = expanded ? session.messageQueue.count : min(3, session.messageQueue.count)
+                ForEach(Array(session.messageQueue.prefix(count).enumerated()), id: \.element.id) { index, message in
                     QueuePill(
-                        message: message, index: index, isNext: index == 0,
+                        message: $session.messageQueue[index], index: index, isNext: index == 0,
                         onSendNow: {
+                            let text = session.messageQueue[index].text
                             sessionManager.dequeueMessage(message.id, from: session)
-                            sessionManager.sendImmediately(message.text, to: session)
+                            sessionManager.sendImmediately(text, to: session)
                         },
                         onDelete: { sessionManager.dequeueMessage(message.id, from: session) }
                     )
@@ -70,13 +71,13 @@ struct InlineQueueStrip: View {
 }
 
 struct QueuePill: View {
-    let message: QueuedMessage
+    @Binding var message: QueuedMessage
     let index: Int
     let isNext: Bool
     var onSendNow: () -> Void
     var onDelete: () -> Void
     @Environment(\.theme) var theme
-    @State private var hovering = false
+    @State private var isEditing = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -91,11 +92,22 @@ struct QueuePill: View {
                     .frame(width: 16)
             }
 
-            Text(message.text)
+            if isEditing {
+                TextField("Edit message", text: $message.text, onCommit: {
+                    isEditing = false
+                })
+                .textFieldStyle(.plain)
                 .font(.system(.caption, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.tail)
                 .foregroundStyle(theme.assistantText)
+                .onExitCommand { isEditing = false }
+            } else {
+                Text(message.text)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundStyle(theme.assistantText)
+                    .onTapGesture { isEditing = true }
+            }
 
             Spacer(minLength: 4)
 
