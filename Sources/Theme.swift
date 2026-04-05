@@ -192,7 +192,22 @@ extension Theme {
         fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
     )
 
-    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura]
+    static let violet = Theme(
+        id: "violet", name: "Violet",
+        chatBg: Color(hex: "#1E1230"), chatBgGradientEnd: Color(hex: "#0F0A1A"),
+        userBubble: Color(hex: "#A855F7"), userBubbleText: .white,
+        assistantBubble: Color(hex: "#1A1228"), assistantBubbleBorder: Color(hex: "#2E1F4A"), assistantText: Color(hex: "#E8E0F8"),
+        toolCardBg: Color(hex: "#150E22"), toolCardBorder: Color(hex: "#2E1F4A"), toolCardText: Color(hex: "#B89EDB"),
+        accent: Color(hex: "#A855F7"),
+        chromeBar: Color(hex: "#1A1228"), chromeBorder: Color(hex: "#2E1F4A"), chromeText: Color(hex: "#8A70AA"),
+        inputBg: Color(hex: "#1A1228"), inputBorder: Color(hex: "#2E1F4A"),
+        mutedText: Color(hex: "#5E4880"), successDot: Color(hex: "#86EFAC"),
+        costText: Color(hex: "#5E4880"), timestampText: Color(hex: "#5E4880"),
+        promptChar: "❯", promptColor: Color(hex: "#A855F7"),
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
+    )
+
+    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet]
 
     static func byId(_ id: String) -> Theme {
         all.first { $0.id == id } ?? midnight
