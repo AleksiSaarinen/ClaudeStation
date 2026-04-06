@@ -84,6 +84,7 @@ struct ContentView: View {
         .onChange(of: draggingSessionId) { _, newValue in
             if newValue != nil { pollForDragEnd() }
         }
+        .background(WindowFrameSaver(name: "MainWindow"))
     }
 }
 
@@ -108,6 +109,21 @@ extension ContentView {
             }
         }
     }
+}
+
+// MARK: - Window Frame Persistence
+
+/// Sets the window's frameAutosaveName so AppKit remembers position and size across launches.
+struct WindowFrameSaver: NSViewRepresentable {
+    let name: String
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            view.window?.setFrameAutosaveName(name)
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // Keyboard shortcut extension for views
