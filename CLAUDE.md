@@ -7,6 +7,7 @@ After making changes:
 2. **Push if it works**: commit and `git push` when tests pass
 3. **Release after bigger changes**: `bash release.sh v1.x.0 "notes"` to cut a GitHub Release with the built .app zip
 4. **Patch broken releases immediately**: if a release shipped with a bug, cut a patch (e.g. v1.6.1) right away — don't leave broken releases out there
+5. **NEVER delete a release**: deleting leaves gaps in version history. Always patch forward instead
 
 ## What This Is
 
