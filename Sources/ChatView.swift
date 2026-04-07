@@ -230,7 +230,14 @@ struct UserMessageRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(theme.userBubble)
+            .background(
+                .ultraThinMaterial,
+                in: RoundedRectangle(cornerRadius: theme.borderRadius)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: theme.borderRadius)
+                    .fill(theme.userBubble.opacity(0.7))
+            )
             .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
             .scaleEffect(appeared ? 1.0 : 0.92)
             .opacity(appeared ? 1.0 : 0.0)
@@ -346,11 +353,17 @@ struct AssistantMessageRow: View {
             }
             .padding(.bottom, 10)
         }
-        .background(theme.assistantBubble)
-        .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: theme.borderRadius)
+        )
+        .background(
+            RoundedRectangle(cornerRadius: theme.borderRadius)
+                .fill(theme.assistantBubble.opacity(0.5))
+        )
         .overlay(
             RoundedRectangle(cornerRadius: theme.borderRadius)
-                .stroke(theme.assistantBubbleBorder, lineWidth: 1)
+                .stroke(theme.assistantBubbleBorder.opacity(0.6), lineWidth: 1)
         )
         .padding(.trailing, 8)
         .onAppear {
