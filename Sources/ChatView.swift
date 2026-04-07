@@ -117,7 +117,7 @@ struct ChatView: View {
                             .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
                     }
                     .buttonStyle(.plain)
-                    .padding(.bottom, 80) // Clear the input bar / queue strip
+                    .padding(.bottom, 12)
                 }
                 .allowsHitTesting(true)
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
