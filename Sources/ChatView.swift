@@ -100,7 +100,7 @@ struct ChatView: View {
         } // ScrollViewReader
 
             // Floating scroll-to-bottom button (outside ScrollViewReader, inside ZStack)
-            if !isAtBottom {
+            if !isAtBottom && !session.chatMessages.isEmpty {
                 VStack {
                     Spacer()
                     Button {
