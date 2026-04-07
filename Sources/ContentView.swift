@@ -183,10 +183,8 @@ struct TabBar: View {
             .padding(.vertical, 2)
         }
         .frame(height: 36)
-        .background(theme.chromeBar)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(theme.chromeBorder).frame(height: 0.5)
-        }
+        .background(theme.chromeBar.opacity(0.5))
+        .modifier(LiquidGlassChrome())
     }
 
     @ViewBuilder

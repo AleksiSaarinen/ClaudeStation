@@ -4,6 +4,7 @@ struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
     @State private var lastScrollTime: Date = .distantPast
+    @State private var isAtBottom = true
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -57,40 +58,61 @@ struct ChatView: View {
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
             .scrollContentBackground(.hidden)
+            .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
             .onAppear {
-                // Single delayed scroll for initial layout
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+                if !session.chatMessages.isEmpty {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
                 }
             }
             .onChange(of: session.chatMessages.count) { _, _ in
-                // New message added — always scroll
-                throttledScroll(proxy: proxy)
+                if isAtBottom { throttledScroll(proxy: proxy) }
             }
             .onChange(of: lastMessageContent) { _, _ in
-                // Streaming content — always scroll (throttled prevents flicker)
-                throttledScroll(proxy: proxy)
+                if isAtBottom { throttledScroll(proxy: proxy) }
             }
             .onChange(of: session.assistantState) { _, _ in
-                throttledScroll(proxy: proxy)
+                if isAtBottom { throttledScroll(proxy: proxy) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
                 proxy.scrollTo("bottom")
             }
         } // ScrollViewReader
 
-            // Floating scroll-to-bottom button (outside ScrollViewReader, inside ZStack)
-            // Scroll-to-bottom button (for manual scrolling up)
-            // Removed — was unreliable with GeometryReader preference key
+            // Floating scroll-to-bottom button
+            if !isAtBottom && !session.chatMessages.isEmpty {
+                VStack {
+                    Spacer()
+                    Button {
+                        NotificationCenter.default.post(name: .init("ScrollToBottom"), object: nil)
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(theme.chromeText)
+                            .frame(width: 32, height: 32)
+                            .background(theme.assistantBubble)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
+                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 12)
+                }
+                .allowsHitTesting(true)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
         } // ZStack
         .background(theme.chatBackground(
             toolName: session.lastToolName,
             isRunning: session.status == .running
         ))
+        .animation(.easeInOut(duration: 0.2), value: isAtBottom)
     }
 
     /// Scroll to bottom, throttled to ~100ms to avoid layout thrashing during streaming.
     private func throttledScroll(proxy: ScrollViewProxy) {
+        guard !session.chatMessages.isEmpty else { return }
         let now = Date()
         guard now.timeIntervalSince(lastScrollTime) > 0.1 else { return }
         lastScrollTime = now
@@ -635,6 +657,24 @@ struct ToolResultCard: View {
                 RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 0))
                     .stroke(theme.toolCardBorder, lineWidth: 1)
             )
+        }
+    }
+}
+
+// MARK: - Scroll Bottom Detector
+
+struct ScrollBottomDetector: ViewModifier {
+    @Binding var isAtBottom: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.onScrollGeometryChange(for: Bool.self) { geo in
+                geo.contentOffset.y + geo.containerSize.height >= geo.contentSize.height - 40
+            } action: { _, newValue in
+                isAtBottom = newValue
+            }
+        } else {
+            content
         }
     }
 }

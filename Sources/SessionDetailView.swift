@@ -496,12 +496,13 @@ struct InputBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(theme.inputBg)
+            .background(theme.inputBg.opacity(0.5))
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(theme.inputBorder, lineWidth: 1)
             )
+            .modifier(LiquidGlassChrome())
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
