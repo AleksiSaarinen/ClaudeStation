@@ -3,7 +3,6 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
-    @State private var isAtBottom = true
     @State private var lastScrollTime: Date = .distantPast
 
     /// Track content length of last message to detect streaming updates
@@ -48,15 +47,8 @@ struct ChatView: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                     }
 
-                    // Invisible scroll anchor at the very bottom
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: BottomVisibleKey.self,
-                            value: geo.frame(in: .named("chatScroll")).maxY
-                        )
-                    }
-                    .frame(height: 1)
-                    .id("bottom")
+                    // Scroll anchor
+                    Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -65,13 +57,6 @@ struct ChatView: View {
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
             .scrollContentBackground(.hidden)
-            .coordinateSpace(name: "chatScroll")
-            .onPreferenceChange(BottomVisibleKey.self) { maxY in
-                // Generous threshold — during streaming, content grows fast and pushes
-                // the bottom anchor down before scroll catches up. A tight threshold
-                // causes isAtBottom to flip false permanently, killing auto-scroll.
-                isAtBottom = maxY < 2000 && maxY > 0
-            }
             .onAppear {
                 // Single delayed scroll for initial layout
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -80,60 +65,32 @@ struct ChatView: View {
             }
             .onChange(of: session.chatMessages.count) { _, _ in
                 // New message added — always scroll
-                throttledScroll(proxy: proxy, force: true)
+                throttledScroll(proxy: proxy)
             }
             .onChange(of: lastMessageContent) { _, _ in
                 // Streaming content — always scroll (throttled prevents flicker)
-                throttledScroll(proxy: proxy, force: true)
+                throttledScroll(proxy: proxy)
             }
             .onChange(of: session.assistantState) { _, _ in
-                throttledScroll(proxy: proxy, force: true)
+                throttledScroll(proxy: proxy)
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
                 proxy.scrollTo("bottom")
             }
-            .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottomIfNeeded"))) { _ in
-                if isAtBottom {
-                    proxy.scrollTo("bottom")
-                }
-            }
         } // ScrollViewReader
 
             // Floating scroll-to-bottom button (outside ScrollViewReader, inside ZStack)
-            if !isAtBottom && !session.chatMessages.isEmpty {
-                VStack {
-                    Spacer()
-                    Button {
-                        // Can't access proxy here, use notification
-                        NotificationCenter.default.post(name: .init("ScrollToBottom"), object: nil)
-                    } label: {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(theme.chromeText)
-                            .frame(width: 32, height: 32)
-                            .background(theme.assistantBubble)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
-                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 12)
-                }
-                .allowsHitTesting(true)
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            }
+            // Scroll-to-bottom button (for manual scrolling up)
+            // Removed — was unreliable with GeometryReader preference key
         } // ZStack
         .background(theme.chatBackground(
             toolName: session.lastToolName,
             isRunning: session.status == .running
         ))
-        .animation(.easeInOut(duration: 0.2), value: isAtBottom)
     }
 
     /// Scroll to bottom, throttled to ~100ms to avoid layout thrashing during streaming.
-    /// `force: true` skips the isAtBottom check (used for new messages from the user).
-    private func throttledScroll(proxy: ScrollViewProxy, force: Bool) {
-        guard force || isAtBottom else { return }
+    private func throttledScroll(proxy: ScrollViewProxy) {
         let now = Date()
         guard now.timeIntervalSince(lastScrollTime) > 0.1 else { return }
         lastScrollTime = now
@@ -141,14 +98,6 @@ struct ChatView: View {
     }
 }
 
-// MARK: - Preference Keys
-
-struct BottomVisibleKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
 
 // MARK: - Welcome Card
 
