@@ -442,9 +442,9 @@ struct InputBar: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(theme.mutedText)
                         .frame(width: 28, height: 28)
-                        .background(theme.toolCardBg)
+                        .background(theme.inputBg)
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(theme.toolCardBorder, lineWidth: 1))
+                        .overlay(Circle().stroke(theme.inputBorder, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .help("Attach file")
@@ -469,9 +469,9 @@ struct InputBar: View {
                             .foregroundStyle(session.planMode ? theme.userBubbleText : theme.mutedText)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(session.planMode ? theme.accent : theme.toolCardBg)
+                            .background(session.planMode ? theme.accent : theme.inputBg)
                             .clipShape(Capsule())
-                            .overlay(Capsule().stroke(session.planMode ? theme.accent : theme.toolCardBorder, lineWidth: 1))
+                            .overlay(Capsule().stroke(session.planMode ? theme.accent : theme.inputBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .help("Toggle plan mode")
@@ -480,9 +480,9 @@ struct InputBar: View {
                     Button(action: onSend) {
                         Image(systemName: isReady ? "arrow.up" : "tray.and.arrow.down")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.mutedText : .white)
+                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.mutedText : theme.assistantBubble)
                             .frame(width: 28, height: 28)
-                            .background(inputText.isEmpty && !hasAttachment ? theme.toolCardBg : theme.accent)
+                            .background(inputText.isEmpty && !hasAttachment ? theme.inputBg : theme.accent)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)

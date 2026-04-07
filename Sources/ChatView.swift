@@ -11,6 +11,11 @@ struct ChatView: View {
         session.chatMessages.last?.content.count ?? 0
     }
 
+    /// Track block count of last message to detect tool use updates
+    private var lastMessageBlockCount: Int {
+        session.chatMessages.last?.blocks.count ?? 0
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
         ScrollViewReader { proxy in
@@ -61,9 +66,10 @@ struct ChatView: View {
             .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
             .onAppear {
                 if !session.chatMessages.isEmpty {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        if let lastId = session.chatMessages.last?.id {
-                            proxy.scrollTo(lastId, anchor: .bottom)
+                    // Multiple scroll attempts as layout settles
+                    for delay in [0.1, 0.3, 0.7, 1.2] {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                            proxy.scrollTo("bottom")
                         }
                     }
                 }
@@ -73,8 +79,12 @@ struct ChatView: View {
                 scrollToEnd(proxy: proxy)
             }
             .onChange(of: lastMessageContent) { _, _ in
-                // Streaming — only scroll if at bottom
+                // Streaming text — scroll if at bottom
                 if isAtBottom { scrollToEnd(proxy: proxy) }
+            }
+            .onChange(of: lastMessageBlockCount) { _, _ in
+                // New tool use block — always scroll
+                scrollToEnd(proxy: proxy)
             }
             .onChange(of: session.assistantState) { _, _ in
                 scrollToEnd(proxy: proxy)

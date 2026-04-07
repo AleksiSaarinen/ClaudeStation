@@ -70,9 +70,18 @@ cp Resources/PetFrames/*.png "$APP/Contents/Resources/PetFrames/" 2>/dev/null
 echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1
 
-# Install to /Applications (kill first so cp can overwrite)
-pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null || true; sleep 1
-rm -rf /Applications/ClaudeStation.app
-cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
-
-echo "Done! Run with: open /Applications/ClaudeStation.app"
+# Install to /Applications (only if app is not running, or --force passed)
+if pgrep -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" > /dev/null 2>&1; then
+    if [[ "$1" == "--force" ]]; then
+        pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null || true; sleep 1
+        rm -rf /Applications/ClaudeStation.app
+        cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
+        echo "Done! Run with: open /Applications/ClaudeStation.app"
+    else
+        echo "App is running. Built to build/ but NOT installed. Restart the app manually or run: bash build.sh --force"
+    fi
+else
+    rm -rf /Applications/ClaudeStation.app
+    cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
+    echo "Done! Run with: open /Applications/ClaudeStation.app"
+fi

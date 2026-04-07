@@ -403,7 +403,7 @@ extension Theme {
         toolCardBg: Color(hex: "#12201A"), toolCardBorder: Color(hex: "#30E080"), toolCardText: Color(hex: "#50FF90"),
         accent: Color(hex: "#50FF90"),
         chromeBar: Color(hex: "#152420"), chromeBorder: Color(hex: "#30E080"), chromeText: Color(hex: "#50FF90"),
-        inputBg: Color(hex: "#152420"), inputBorder: Color(hex: "#30E080"),
+        inputBg: Color(hex: "#2A5040"), inputBorder: Color(hex: "#30E080"),
         mutedText: Color(hex: "#40C070"), successDot: Color(hex: "#50FF90"),
         costText: Color(hex: "#40C070"), timestampText: Color(hex: "#40C070"),
         promptChar: "❯", promptColor: Color(hex: "#FF6EB4"),
