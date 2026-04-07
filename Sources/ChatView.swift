@@ -141,6 +141,7 @@ struct UserMessageRow: View {
     let message: ChatMessage
     @Environment(\.theme) var theme
     @State private var appeared = false
+    @State private var showFullImage = false
 
     private var textContent: String {
         // Strip [Image: path] from display text
@@ -167,6 +168,15 @@ struct UserMessageRow: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: 200, maxHeight: 150)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .onTapGesture { showFullImage = true }
+                        .cursor(.pointingHand)
+                        .popover(isPresented: $showFullImage, arrowEdge: .leading) {
+                            Image(nsImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: 600, maxHeight: 500)
+                                .padding(8)
+                        }
                 }
 
                 // Text content (without [Image: ...])
