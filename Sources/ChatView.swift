@@ -191,6 +191,7 @@ struct UserMessageRow: View {
             .padding(.vertical, 10)
             .background(theme.userBubble.opacity(0.55))
             .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
+            .modifier(LiquidGlassModifier(tint: theme.userBubble.opacity(0.4)))
             .scaleEffect(appeared ? 1.0 : 0.92)
             .opacity(appeared ? 1.0 : 0.0)
         }
@@ -307,6 +308,7 @@ struct AssistantMessageRow: View {
         }
         .background(theme.assistantBubble.opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
+        .modifier(LiquidGlassModifier(tint: theme.assistantBubble.opacity(0.3)))
         .overlay(
             RoundedRectangle(cornerRadius: theme.borderRadius)
                 .stroke(theme.assistantBubbleBorder.opacity(0.25), lineWidth: 0.5)
@@ -637,6 +639,19 @@ struct ToolResultCard: View {
                 RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 0))
                     .stroke(theme.toolCardBorder, lineWidth: 1)
             )
+        }
+    }
+}
+
+// MARK: - Liquid Glass (macOS 26+, fallback no-op)
+
+struct LiquidGlassModifier: ViewModifier {
+    let tint: Color
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.tint(tint))
+        } else {
+            content
         }
     }
 }
