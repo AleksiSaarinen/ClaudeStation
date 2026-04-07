@@ -71,7 +71,7 @@ echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1
 
 # Install to /Applications (kill first so cp can overwrite)
-pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null; sleep 1
+pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null || true; sleep 1
 rm -rf /Applications/ClaudeStation.app
 cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
 
