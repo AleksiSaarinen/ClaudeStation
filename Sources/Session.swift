@@ -28,7 +28,7 @@ struct QueuedMessage: Identifiable {
 // MARK: - Session
 
 class Session: ObservableObject, Identifiable {
-    let id = UUID()
+    let id: UUID
 
     @Published var name: String
     @Published var workingDirectory: String
@@ -63,7 +63,8 @@ class Session: ObservableObject, Identifiable {
         return dir.isEmpty ? "Session" : dir
     }
 
-    init(name: String = "", workingDirectory: String = "~") {
+    init(id: UUID = UUID(), name: String = "", workingDirectory: String = "~") {
+        self.id = id
         self.name = name
         self.workingDirectory = workingDirectory
     }

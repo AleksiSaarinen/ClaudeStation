@@ -4,6 +4,7 @@ import Foundation
 struct SessionPersistence {
     private static let dirPath = NSHomeDirectory() + "/.claudestation"
     private static let filePath = dirPath + "/sessions.json"
+    private static let activeIdPath = dirPath + "/active_session_id"
 
     struct SavedSession: Codable {
         let id: String
@@ -13,7 +14,7 @@ struct SessionPersistence {
         let chatMessages: [ChatMessage]
     }
 
-    static func save(sessions: [Session]) {
+    static func save(sessions: [Session], activeSessionId: UUID?) {
         let saved = sessions.map { session in
             SavedSession(
                 id: session.id.uuidString,
@@ -28,22 +29,35 @@ struct SessionPersistence {
             try FileManager.default.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
             let data = try JSONEncoder().encode(saved)
             try data.write(to: URL(fileURLWithPath: filePath))
+            if let activeId = activeSessionId {
+                try activeId.uuidString.write(toFile: activeIdPath, atomically: true, encoding: .utf8)
+            }
         } catch {
             // Silent fail — persistence is best-effort
         }
     }
 
-    static func load() -> [Session] {
+    static func load() -> (sessions: [Session], activeSessionId: UUID?) {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: filePath)),
               let saved = try? JSONDecoder().decode([SavedSession].self, from: data)
-        else { return [] }
+        else { return ([], nil) }
 
-        return saved.map { s in
-            let session = Session(name: s.name, workingDirectory: s.workingDirectory)
+        let sessions = saved.map { s in
+            let id = UUID(uuidString: s.id) ?? UUID()
+            let session = Session(id: id, name: s.name, workingDirectory: s.workingDirectory)
             session.claudeSessionId = s.claudeSessionId
             session.chatMessages = s.chatMessages
             session.status = .waitingForInput
             return session
         }
+
+        let activeId: UUID?
+        if let str = try? String(contentsOfFile: activeIdPath, encoding: .utf8) {
+            activeId = UUID(uuidString: str.trimmingCharacters(in: .whitespacesAndNewlines))
+        } else {
+            activeId = nil
+        }
+
+        return (sessions, activeId)
     }
 }

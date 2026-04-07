@@ -25,12 +25,17 @@ class SessionManager: ObservableObject {
 
     init() {
         // Restore saved sessions or start fresh
-        let restored = SessionPersistence.load()
+        let (restored, savedActiveId) = SessionPersistence.load()
         if restored.isEmpty {
             createSession()
         } else {
             sessions = restored
-            activeSessionId = sessions.first?.id
+            // Restore active tab, fallback to first
+            if let savedActiveId, sessions.contains(where: { $0.id == savedActiveId }) {
+                activeSessionId = savedActiveId
+            } else {
+                activeSessionId = sessions.first?.id
+            }
         }
 
         // Listen for save triggers from TerminalService
@@ -46,7 +51,7 @@ class SessionManager: ObservableObject {
         saveDebounce?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            SessionPersistence.save(sessions: self.sessions)
+            SessionPersistence.save(sessions: self.sessions, activeSessionId: self.activeSessionId)
         }
         saveDebounce = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)

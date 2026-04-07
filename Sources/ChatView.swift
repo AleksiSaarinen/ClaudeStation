@@ -61,22 +61,26 @@ struct ChatView: View {
             .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
             .onAppear {
                 if !session.chatMessages.isEmpty {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        proxy.scrollTo("bottom")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        if let lastId = session.chatMessages.last?.id {
+                            proxy.scrollTo(lastId, anchor: .bottom)
+                        }
                     }
                 }
             }
             .onChange(of: session.chatMessages.count) { _, _ in
-                if isAtBottom { throttledScroll(proxy: proxy) }
+                // New message — always scroll
+                scrollToEnd(proxy: proxy)
             }
             .onChange(of: lastMessageContent) { _, _ in
-                if isAtBottom { throttledScroll(proxy: proxy) }
+                // Streaming — only scroll if at bottom
+                if isAtBottom { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: session.assistantState) { _, _ in
-                if isAtBottom { throttledScroll(proxy: proxy) }
+                scrollToEnd(proxy: proxy)
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
-                proxy.scrollTo("bottom")
+                scrollToEnd(proxy: proxy)
             }
         } // ScrollViewReader
 
@@ -108,8 +112,7 @@ struct ChatView: View {
     }
 
     /// Scroll to bottom, throttled to ~100ms to avoid layout thrashing during streaming.
-    private func throttledScroll(proxy: ScrollViewProxy) {
-        guard !session.chatMessages.isEmpty else { return }
+    private func scrollToEnd(proxy: ScrollViewProxy) {
         let now = Date()
         guard now.timeIntervalSince(lastScrollTime) > 0.1 else { return }
         lastScrollTime = now
@@ -208,7 +211,7 @@ struct UserMessageRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(theme.userBubble.opacity(0.55), in: RoundedRectangle(cornerRadius: 3))
+            .background(theme.userBubble.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
             .scaleEffect(appeared ? 1.0 : 0.92)
             .opacity(appeared ? 1.0 : 0.0)
         }
@@ -323,9 +326,9 @@ struct AssistantMessageRow: View {
             }
             .padding(.bottom, 10)
         }
-        .background(theme.assistantBubble.opacity(0.35), in: RoundedRectangle(cornerRadius: 3))
+        .background(theme.assistantBubble.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
-            RoundedRectangle(cornerRadius: 3)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(theme.assistantBubbleBorder.opacity(0.25), lineWidth: 0.5)
         )
         .padding(.trailing, 8)

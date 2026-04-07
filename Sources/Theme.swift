@@ -70,8 +70,19 @@ struct AnimatedGradientBackground: View {
     let theme: Theme
     var toolName: String?
     var isRunning: Bool
-    @State private var particles: [Particle] = []
-    @State private var initialized = false
+    @State private var particles: [Particle] = (0..<25).map { _ in
+        Particle(
+            x: Double.random(in: 0...1),
+            y: Double.random(in: 0...1),
+            size: Double.random(in: 1.5...3.5),
+            opacity: Double.random(in: 0.5...1.0),
+            speedX: Double.random(in: -0.003...0.003),
+            speedY: Double.random(in: 0.002...0.008),
+            phase: Double.random(in: 0...(.pi * 2)),
+            phaseSpeed: Double.random(in: 0.3...1.2),
+            life: 1.0
+        )
+    }
     @State private var startTime: Date = .now
 
     struct Particle {
@@ -129,16 +140,17 @@ struct AnimatedGradientBackground: View {
                     )
                 )
 
-                // Moving gradient blobs
+                // Moving gradient blobs — alternate between accent and userBubble colors
                 let blobRadius = min(size.width, size.height) * 0.5
                 let blobColor = Color(nsColor: activityColor.withAlphaComponent(blobOpacity))
-                let blobs: [(Double, Double, Double, Double)] = [
-                    (0.25, 0.2, 0.7, 0.5),
-                    (0.75, 0.7, 0.6, 0.8),
-                    (0.5,  0.5, 0.4, 0.3),
-                    (0.3,  0.8, 0.5, 0.6),
+                let blobColor2 = Color(nsColor: NSColor(theme.userBubble).withAlphaComponent(blobOpacity))
+                let blobs: [(Double, Double, Double, Double, Bool)] = [
+                    (0.25, 0.2, 0.7, 0.5, false),
+                    (0.75, 0.7, 0.6, 0.8, true),
+                    (0.5,  0.5, 0.4, 0.3, false),
+                    (0.3,  0.8, 0.5, 0.6, true),
                 ]
-                for (bx, by, fx, fy) in blobs {
+                for (bx, by, fx, fy, useAlt) in blobs {
                     let cx = size.width * (bx + 0.2 * sin(t * 0.05 * fx * speedMult))
                     let cy = size.height * (by + 0.15 * cos(t * 0.05 * fy * speedMult))
                     context.fill(
@@ -147,7 +159,7 @@ struct AnimatedGradientBackground: View {
                             width: blobRadius * 2, height: blobRadius * 2
                         )),
                         with: .radialGradient(
-                            Gradient(colors: [blobColor, .clear]),
+                            Gradient(colors: [useAlt ? blobColor2 : blobColor, .clear]),
                             center: CGPoint(x: cx, y: cy),
                             startRadius: 0,
                             endRadius: blobRadius
@@ -205,22 +217,7 @@ struct AnimatedGradientBackground: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            guard !initialized else { return }
-            initialized = true
             startTime = .now
-            particles = (0..<25).map { _ in
-                Particle(
-                    x: Double.random(in: 0...1),
-                    y: Double.random(in: 0...1),
-                    size: Double.random(in: 1.5...3.5),
-                    opacity: Double.random(in: 0.5...1.0),
-                    speedX: Double.random(in: -0.003...0.003),
-                    speedY: Double.random(in: 0.002...0.008),
-                    phase: Double.random(in: 0...(.pi * 2)),
-                    phaseSpeed: Double.random(in: 0.3...1.2),
-                    life: 1.0
-                )
-            }
         }
     }
 }
@@ -398,7 +395,37 @@ extension Theme {
         fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 10
     )
 
-    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon]
+    static let melon = Theme(
+        id: "melon", name: "Melon",
+        chatBg: Color(hex: "#20905A"), chatBgGradientEnd: Color(hex: "#E8509A"),
+        userBubble: Color(hex: "#FF69B4"), userBubbleText: .white,
+        assistantBubble: Color(hex: "#152420"), assistantBubbleBorder: Color(hex: "#30E080"), assistantText: Color(hex: "#E8FFF0"),
+        toolCardBg: Color(hex: "#12201A"), toolCardBorder: Color(hex: "#30E080"), toolCardText: Color(hex: "#50FF90"),
+        accent: Color(hex: "#50FF90"),
+        chromeBar: Color(hex: "#152420"), chromeBorder: Color(hex: "#30E080"), chromeText: Color(hex: "#50FF90"),
+        inputBg: Color(hex: "#152420"), inputBorder: Color(hex: "#30E080"),
+        mutedText: Color(hex: "#40C070"), successDot: Color(hex: "#50FF90"),
+        costText: Color(hex: "#40C070"), timestampText: Color(hex: "#40C070"),
+        promptChar: "❯", promptColor: Color(hex: "#FF6EB4"),
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 6
+    )
+
+    static let sorbet = Theme(
+        id: "sorbet", name: "Sorbet",
+        chatBg: Color(hex: "#E8F5EE"), chatBgGradientEnd: Color(hex: "#F5E8E0"),
+        userBubble: Color(hex: "#FF4500"), userBubbleText: .white,
+        assistantBubble: Color(hex: "#F0EBF5"), assistantBubbleBorder: Color(hex: "#D0C0E8"), assistantText: Color(hex: "#2A2035"),
+        toolCardBg: Color(hex: "#F5F0FA"), toolCardBorder: Color(hex: "#D0C0E8"), toolCardText: Color(hex: "#5A4070"),
+        accent: Color(hex: "#FF6030"),
+        chromeBar: Color(hex: "#F0EBF5"), chromeBorder: Color(hex: "#D0C0E8"), chromeText: Color(hex: "#6A5090"),
+        inputBg: Color(hex: "#F0EBF5"), inputBorder: Color(hex: "#D0C0E8"),
+        mutedText: Color(hex: "#9A88B8"), successDot: Color(hex: "#30C070"),
+        costText: Color(hex: "#9A88B8"), timestampText: Color(hex: "#9A88B8"),
+        promptChar: "❯", promptColor: Color(hex: "#FF4500"),
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 8
+    )
+
+    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon, melon, sorbet]
 
     static func byId(_ id: String) -> Theme {
         all.first { $0.id == id } ?? midnight
