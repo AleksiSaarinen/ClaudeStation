@@ -116,18 +116,21 @@ struct QueuePill: View {
                 Text("Send")
                     .font(.caption2.bold())
                     .foregroundStyle(theme.accent)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                     .background(theme.accent.opacity(0.12))
                     .clipShape(Capsule())
+                    .contentShape(Capsule())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
 
             Button(action: onDelete) {
                 Image(systemName: "xmark").font(.caption2)
                     .foregroundStyle(theme.mutedText)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
