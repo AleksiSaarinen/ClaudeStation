@@ -5,7 +5,7 @@ import SwiftUI
 struct LiquidGlassChrome: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
-            content.glassEffect(.regular)
+            content.glassEffect(.regular.interactive())
         } else {
             content
         }

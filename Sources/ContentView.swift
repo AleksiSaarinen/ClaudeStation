@@ -13,7 +13,15 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            theme.chatBackground.ignoresSafeArea()
+            // Animated background extends behind tab bar
+            if let session = sessionManager.activeSession {
+                theme.chatBackground(
+                    toolName: session.lastToolName,
+                    isRunning: session.status == .running
+                ).ignoresSafeArea()
+            } else {
+                theme.chatBackground.ignoresSafeArea()
+            }
 
             VStack(spacing: 0) {
                 TabBar(draggingSessionId: $draggingSessionId)
@@ -183,8 +191,7 @@ struct TabBar: View {
             .padding(.vertical, 2)
         }
         .frame(height: 36)
-        .background(theme.chromeBar.opacity(0.5))
-        .modifier(LiquidGlassChrome())
+        .background(theme.chromeBar.opacity(0.3))
     }
 
     @ViewBuilder
@@ -292,7 +299,7 @@ struct SessionTab: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isActive ? theme.chatBg : (hovering ? theme.chromeBorder.opacity(0.25) : .clear))
+                .fill(isActive ? Color.white.opacity(0.08) : (hovering ? Color.white.opacity(0.04) : .clear))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)

@@ -62,7 +62,7 @@ struct ChatView: View {
             .onAppear {
                 if !session.chatMessages.isEmpty {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
+                        proxy.scrollTo("bottom")
                     }
                 }
             }
@@ -103,10 +103,7 @@ struct ChatView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
         } // ZStack
-        .background(theme.chatBackground(
-            toolName: session.lastToolName,
-            isRunning: session.status == .running
-        ))
+        .background(Color.clear)
         .animation(.easeInOut(duration: 0.2), value: isAtBottom)
     }
 

@@ -20,9 +20,6 @@ struct SessionDetailView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Session header bar with tab switcher
-            SessionHeaderBar(session: session, activeTab: $activeTab)
-
             ChatView(session: session)
                 .contentShape(Rectangle())
                 .onTapGesture { inputFocused = true }
@@ -269,7 +266,7 @@ struct SessionHeaderBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 3)
-        .background(theme.chatBackground)
+        .modifier(LiquidGlassChrome())
         .animation(.easeInOut(duration: 0.3), value: session.status)
     }
 }
@@ -496,7 +493,7 @@ struct InputBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(theme.inputBg.opacity(0.5))
+            .background(Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
