@@ -116,14 +116,27 @@ extension ContentView {
 /// Sets the window's frameAutosaveName so AppKit remembers position and size across launches.
 struct WindowFrameSaver: NSViewRepresentable {
     let name: String
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            view.window?.setFrameAutosaveName(name)
-        }
-        return view
+
+    func makeNSView(context: Context) -> FrameSaverView {
+        FrameSaverView(autosaveName: name)
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: FrameSaverView, context: Context) {}
+
+    class FrameSaverView: NSView {
+        let autosaveName: String
+        private var didSet = false
+        init(autosaveName: String) {
+            self.autosaveName = autosaveName
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { fatalError() }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard !didSet, let window else { return }
+            didSet = true
+            window.setFrameAutosaveName(autosaveName)
+        }
+    }
 }
 
 // Keyboard shortcut extension for views
