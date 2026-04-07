@@ -189,7 +189,7 @@ struct UserMessageRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(theme.userBubble.opacity(0.75))
+            .background(theme.userBubble.opacity(0.55))
             .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
             .scaleEffect(appeared ? 1.0 : 0.92)
             .opacity(appeared ? 1.0 : 0.0)
@@ -305,11 +305,11 @@ struct AssistantMessageRow: View {
             }
             .padding(.bottom, 10)
         }
-        .background(theme.assistantBubble.opacity(0.55))
+        .background(theme.assistantBubble.opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
         .overlay(
             RoundedRectangle(cornerRadius: theme.borderRadius)
-                .stroke(theme.assistantBubbleBorder.opacity(0.4), lineWidth: 0.5)
+                .stroke(theme.assistantBubbleBorder.opacity(0.25), lineWidth: 0.5)
         )
         .padding(.trailing, 8)
         .onAppear {

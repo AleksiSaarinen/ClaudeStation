@@ -109,7 +109,7 @@ struct AnimatedGradientBackground: View {
 
     /// Blob opacity changes with activity
     private var blobOpacity: Double {
-        isRunning ? 0.10 : 0.06
+        isRunning ? 0.18 : 0.12
     }
 
     var body: some View {
@@ -186,7 +186,7 @@ struct AnimatedGradientBackground: View {
                         Path(ellipseIn: CGRect(x: screenX - r * 2, y: screenY - r * 2, width: r * 4, height: r * 4)),
                         with: .radialGradient(
                             Gradient(colors: [
-                                Color(nsColor: accentColor.withAlphaComponent(alpha * 0.3)),
+                                Color(nsColor: accentColor.withAlphaComponent(alpha * 0.5)),
                                 .clear
                             ]),
                             center: CGPoint(x: screenX, y: screenY),
@@ -213,7 +213,7 @@ struct AnimatedGradientBackground: View {
                     x: Double.random(in: 0...1),
                     y: Double.random(in: 0...1),
                     size: Double.random(in: 1.5...3.5),
-                    opacity: Double.random(in: 0.3...0.8),
+                    opacity: Double.random(in: 0.5...1.0),
                     speedX: Double.random(in: -0.003...0.003),
                     speedY: Double.random(in: 0.002...0.008),
                     phase: Double.random(in: 0...(.pi * 2)),
