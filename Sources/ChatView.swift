@@ -15,7 +15,7 @@ struct ChatView: View {
         ZStack(alignment: .bottom) {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
+                LazyVStack(alignment: .leading, spacing: 12) {
                     if session.chatMessages.isEmpty && session.status != .idle {
                         WelcomeCard(session: session)
                             .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -270,8 +270,8 @@ struct AssistantMessageRow: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.top, 7)
-            .padding(.bottom, 5)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
 
             // Content blocks
             VStack(alignment: .leading, spacing: 6) {
@@ -351,7 +351,7 @@ struct AssistantMessageRow: View {
                         .padding(.horizontal, 12)
                 }
             }
-            .padding(.bottom, 7)
+            .padding(.bottom, 10)
         }
         .background(
             .thinMaterial,

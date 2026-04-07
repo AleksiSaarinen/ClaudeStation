@@ -494,8 +494,8 @@ struct InputBar: View {
                 }
             }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(theme.inputBg)
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .overlay(
@@ -504,6 +504,6 @@ struct InputBar: View {
             )
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
     }
 }
