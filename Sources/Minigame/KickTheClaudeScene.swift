@@ -313,6 +313,13 @@ final class KickTheClaudeScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
+        // Sync HP to buddy for face expressions
+        if let buddy = buddy, let gs = gameState {
+            buddy.currentHP = CGFloat(gs.hp)
+            buddy.currentMaxHP = CGFloat(gs.effectiveMaxHP)
+            buddy.updateFace(hp: buddy.currentHP, maxHP: buddy.currentMaxHP, isHit: false)
+        }
+
         // Clamp buddy body part velocities and positions
         if let buddy = buddy {
             let maxSpeed: CGFloat = 1500

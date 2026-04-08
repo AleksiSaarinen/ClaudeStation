@@ -4,7 +4,8 @@ struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
     @State private var lastScrollTime: Date = .distantPast
-    @State private var isAtBottom = true
+    @State private var userScrolledUp = false
+    @State private var lastContentHeight: CGFloat = 0
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -53,8 +54,8 @@ struct ChatView: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                     }
 
-                    // Bottom spacer (not a scroll target)
-                    Color.clear.frame(height: 1)
+                    // Scroll anchor at the very end of content
+                    Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -63,7 +64,7 @@ struct ChatView: View {
                 .animation(.easeInOut(duration: 0.25), value: session.assistantState)
             }
             .scrollContentBackground(.hidden)
-            .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
+            .modifier(UserScrollDetector(userScrolledUp: $userScrolledUp, lastContentHeight: $lastContentHeight))
             .onAppear {
                 if !session.chatMessages.isEmpty {
                     for delay in [0.1, 0.3, 0.7, 1.2] {
@@ -73,25 +74,31 @@ struct ChatView: View {
                     }
                 }
             }
-            .onChange(of: session.chatMessages.count) { _, _ in
-                if isAtBottom { scrollToEnd(proxy: proxy) }
+            .onChange(of: session.chatMessages.count) { old, new in
+                // Only reset scroll lock when USER sends a message (count increases
+                // and the new last message is from the user)
+                if new > old, let last = session.chatMessages.last, last.role == .user {
+                    userScrolledUp = false
+                }
+                if !userScrolledUp { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: lastMessageContent) { _, _ in
-                if isAtBottom { scrollToEnd(proxy: proxy) }
+                if !userScrolledUp { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: lastMessageBlockCount) { _, _ in
-                if isAtBottom { scrollToEnd(proxy: proxy) }
+                if !userScrolledUp { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: session.assistantState) { _, _ in
-                if isAtBottom { scrollToEnd(proxy: proxy) }
+                if !userScrolledUp { scrollToEnd(proxy: proxy) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
-                scrollToLastItem(proxy: proxy)
+                userScrolledUp = false
+                scrollToEnd(proxy: proxy)
             }
         } // ScrollViewReader
 
             // Floating scroll-to-bottom button
-            if !isAtBottom && !session.chatMessages.isEmpty {
+            if userScrolledUp && !session.chatMessages.isEmpty {
                 VStack {
                     Spacer()
                     Button {
@@ -114,10 +121,10 @@ struct ChatView: View {
             }
         } // ZStack
         .background(Color.clear)
-        .animation(.easeInOut(duration: 0.2), value: isAtBottom)
+        .animation(.easeInOut(duration: 0.2), value: userScrolledUp)
     }
 
-    /// Scroll to bottom, throttled to ~100ms to avoid layout thrashing during streaming.
+    /// Scroll to the last message (for initial load — won't overshoot)
     private func scrollToLastItem(proxy: ScrollViewProxy) {
         if case .thinking = session.assistantState {
             proxy.scrollTo("thinking", anchor: .bottom)
@@ -126,11 +133,12 @@ struct ChatView: View {
         }
     }
 
+    /// Scroll to the bottom anchor (for live updates — tracks content growth)
     private func scrollToEnd(proxy: ScrollViewProxy) {
         let now = Date()
-        guard now.timeIntervalSince(lastScrollTime) > 0.1 else { return }
+        guard now.timeIntervalSince(lastScrollTime) > 0.05 else { return }
         lastScrollTime = now
-        scrollToLastItem(proxy: proxy)
+        proxy.scrollTo("bottom")
     }
 }
 
@@ -677,19 +685,45 @@ struct ToolResultCard: View {
 
 // MARK: - Scroll Bottom Detector
 
-struct ScrollBottomDetector: ViewModifier {
-    @Binding var isAtBottom: Bool
+/// Detects when the USER scrolls up (vs content growing).
+/// Sets userScrolledUp = true when the user scrolls away from bottom.
+/// Resets when user scrolls back to bottom.
+struct UserScrollDetector: ViewModifier {
+    @Binding var userScrolledUp: Bool
+    @Binding var lastContentHeight: CGFloat
 
     func body(content: Content) -> some View {
         if #available(macOS 15.0, *) {
-            content.onScrollGeometryChange(for: Bool.self) { geo in
-                geo.contentOffset.y + geo.containerSize.height >= geo.contentSize.height - 40
-            } action: { _, newValue in
-                isAtBottom = newValue
+            content.onScrollGeometryChange(for: ScrollInfo.self) { geo in
+                ScrollInfo(
+                    offsetY: geo.contentOffset.y,
+                    containerHeight: geo.containerSize.height,
+                    contentHeight: geo.contentSize.height
+                )
+            } action: { old, new in
+                let atBottom = new.offsetY + new.containerHeight >= new.contentHeight - 50
+                let contentGrew = new.contentHeight > lastContentHeight + 1
+                lastContentHeight = new.contentHeight
+
+                if atBottom {
+                    // User scrolled back to bottom — re-engage auto-scroll
+                    userScrolledUp = false
+                } else if !contentGrew {
+                    // Content didn't grow but we're not at bottom — user scrolled up
+                    userScrolledUp = true
+                }
+                // If content grew and we're not at bottom, that's just content pushing
+                // the bottom away — DON'T set userScrolledUp
             }
         } else {
             content
         }
+    }
+
+    struct ScrollInfo: Equatable {
+        let offsetY: CGFloat
+        let containerHeight: CGFloat
+        let contentHeight: CGFloat
     }
 }
 

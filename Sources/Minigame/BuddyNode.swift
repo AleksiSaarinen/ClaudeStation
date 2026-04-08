@@ -10,6 +10,10 @@ let wallCategory: UInt32   = 0x4
 
 final class BuddyNode: SKNode {
 
+    // MARK: HP (set by scene each frame)
+    var currentHP: CGFloat = 100
+    var currentMaxHP: CGFloat = 100
+
     // MARK: Body Parts
 
     let head: SKShapeNode
@@ -453,6 +457,9 @@ final class BuddyNode: SKNode {
             part.fillColor = NSColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1.0)
         }
 
+        // Hit face
+        updateFace(hp: currentHP, maxHP: currentMaxHP, isHit: true)
+
         // Wiggle
         let wiggle = SKAction.sequence([
             SKAction.rotate(byAngle: 0.1, duration: 0.05),
@@ -461,7 +468,7 @@ final class BuddyNode: SKNode {
         ])
         torso.run(wiggle)
 
-        // Restore colors after brief flash
+        // Restore colors and face after brief flash
         let restore = SKAction.sequence([
             SKAction.wait(forDuration: 0.15),
             SKAction.run { [weak self] in
@@ -471,6 +478,7 @@ final class BuddyNode: SKNode {
                         part.fillColor = originalColors[i]
                     }
                 }
+                self.updateFace(hp: self.currentHP, maxHP: self.currentMaxHP, isHit: false)
             }
         ])
         run(restore)
