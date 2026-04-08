@@ -54,6 +54,14 @@ struct ChatView: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                     }
 
+                    // Execute Plan button — shows after plan mode response
+                    if session.planMode
+                        && session.status == .waitingForInput
+                        && session.chatMessages.last?.role == .assistant {
+                        ExecutePlanButton(session: session)
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
+
                     // Scroll anchor at the very end of content
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -728,6 +736,54 @@ struct UserScrollDetector: ViewModifier {
         let offsetY: CGFloat
         let containerHeight: CGFloat
         let contentHeight: CGFloat
+    }
+}
+
+// MARK: - Execute Plan Button
+
+struct ExecutePlanButton: View {
+    @ObservedObject var session: Session
+    @EnvironmentObject var sessionManager: SessionManager
+    @Environment(\.theme) var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                sessionManager.sendImmediately("Go ahead and execute the plan.", to: session)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill")
+                        .font(.caption)
+                    Text("Execute Plan")
+                        .font(.system(.caption, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(theme.accent)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                sessionManager.sendImmediately("Reject the plan. Explain what you would do differently.", to: session)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark")
+                        .font(.caption)
+                    Text("Reject")
+                        .font(.system(.caption, weight: .medium))
+                }
+                .foregroundStyle(theme.mutedText)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(theme.assistantBubble.opacity(0.5))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(theme.chromeBorder, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
     }
 }
 
