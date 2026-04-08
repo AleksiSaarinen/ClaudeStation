@@ -75,12 +75,16 @@ struct ChatView: View {
                 }
             }
             .onChange(of: session.chatMessages.count) { old, new in
-                // Only reset scroll lock when USER sends a message (count increases
-                // and the new last message is from the user)
+                // Only reset scroll lock when USER sends a message
                 if new > old, let last = session.chatMessages.last, last.role == .user {
                     userScrolledUp = false
                 }
-                if !userScrolledUp { scrollToEnd(proxy: proxy) }
+                if !userScrolledUp {
+                    // Small delay for layout to settle after new message
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        scrollToEnd(proxy: proxy)
+                    }
+                }
             }
             .onChange(of: lastMessageContent) { _, _ in
                 if !userScrolledUp { scrollToEnd(proxy: proxy) }

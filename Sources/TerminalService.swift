@@ -45,9 +45,14 @@ class TerminalService {
     func send(text: String, to session: Session, force: Bool = false) {
         guard !text.isEmpty else { return }
 
-        // Prevent concurrent processes — queue if busy (unless force-sending from queue)
-        if !force && session.activeProcess != nil {
-            session.messageQueue.append(QueuedMessage(text: text))
+        // Prevent concurrent processes — queue if busy
+        if session.activeProcess != nil {
+            if force {
+                // Force: insert at front of queue so it sends next
+                session.messageQueue.insert(QueuedMessage(text: text), at: 0)
+            } else {
+                session.messageQueue.append(QueuedMessage(text: text))
+            }
             return
         }
 
