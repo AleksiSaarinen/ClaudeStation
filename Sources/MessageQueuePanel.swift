@@ -8,64 +8,60 @@ struct InlineQueueStrip: View {
     @State private var expanded: Bool = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            Divider()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "tray.full")
+                    .font(.caption2)
+                    .foregroundStyle(theme.accent)
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "tray.full")
-                        .font(.caption2)
-                        .foregroundStyle(theme.accent)
+                Text("\(session.messageQueue.count) queued")
+                    .font(.caption.bold())
+                    .foregroundStyle(theme.accent)
 
-                    Text("\(session.messageQueue.count) queued")
-                        .font(.caption.bold())
-                        .foregroundStyle(theme.accent)
+                Spacer()
 
-                    Spacer()
-
-                    if session.messageQueue.count > 1 {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
-                        } label: {
-                            Image(systemName: expanded ? "chevron.down" : "chevron.up")
-                                .font(.caption2.bold())
-                                .foregroundStyle(theme.mutedText)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-
-                    Button { session.messageQueue.removeAll() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.caption)
+                if session.messageQueue.count > 1 {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                            .font(.caption2.bold())
                             .foregroundStyle(theme.mutedText)
                     }
                     .buttonStyle(.borderless)
                 }
 
-                let count = expanded ? session.messageQueue.count : min(3, session.messageQueue.count)
-                ForEach(Array(session.messageQueue.prefix(count).enumerated()), id: \.element.id) { index, message in
-                    QueuePill(
-                        message: $session.messageQueue[index], index: index, isNext: index == 0,
-                        onSendNow: {
-                            let text = session.messageQueue[index].text
-                            sessionManager.dequeueMessage(message.id, from: session)
-                            sessionManager.sendImmediately(text, to: session)
-                        },
-                        onDelete: { sessionManager.dequeueMessage(message.id, from: session) }
-                    )
-                }
-
-                if !expanded && session.messageQueue.count > 3 {
-                    Text("+\(session.messageQueue.count - 3) more")
-                        .font(.caption2)
+                Button { session.messageQueue.removeAll() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption)
                         .foregroundStyle(theme.mutedText)
-                        .padding(.leading, 4)
                 }
+                .buttonStyle(.borderless)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(theme.chromeBar.opacity(0.9))
+
+            let count = expanded ? session.messageQueue.count : min(3, session.messageQueue.count)
+            ForEach(Array(session.messageQueue.prefix(count).enumerated()), id: \.element.id) { index, message in
+                QueuePill(
+                    message: $session.messageQueue[index], index: index, isNext: index == 0,
+                    onSendNow: {
+                        let text = session.messageQueue[index].text
+                        sessionManager.dequeueMessage(message.id, from: session)
+                        sessionManager.sendImmediately(text, to: session)
+                    },
+                    onDelete: { sessionManager.dequeueMessage(message.id, from: session) }
+                )
+            }
+
+            if !expanded && session.messageQueue.count > 3 {
+                Text("+\(session.messageQueue.count - 3) more")
+                    .font(.caption2)
+                    .foregroundStyle(theme.mutedText)
+                    .padding(.leading, 4)
+            }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(theme.assistantBubble.opacity(0.5))
         .animation(.easeInOut(duration: 0.15), value: session.messageQueue.count)
     }
 }
@@ -132,15 +128,15 @@ struct QueuePill: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 4))
-                .fill(isNext ? theme.accent.opacity(0.08) : theme.toolCardBg)
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isNext ? theme.accent.opacity(0.12) : theme.assistantBubble.opacity(0.4))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: max(theme.borderRadius - 6, 4))
-                .strokeBorder(isNext ? theme.accent.opacity(0.2) : theme.toolCardBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isNext ? theme.accent.opacity(0.3) : theme.assistantBubbleBorder.opacity(0.3), lineWidth: 0.5)
         )
     }
 }

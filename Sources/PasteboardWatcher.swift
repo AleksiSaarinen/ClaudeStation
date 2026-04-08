@@ -3,8 +3,9 @@ import SwiftUI
 
 /// Monitors the system pasteboard for new images (screenshots) and surfaces them for attachment.
 class PasteboardWatcher: ObservableObject {
-    @Published var pendingImage: NSImage?
-    @Published var pendingImagePath: String?
+    @Published var pendingImage: NSImage?  // First image for preview
+    @Published var pendingImagePath: String?  // Legacy single path
+    @Published var pendingImagePaths: [String] = []  // All image paths
 
     private var timer: Timer?
     private var lastChangeCount: Int = 0
@@ -86,18 +87,20 @@ class PasteboardWatcher: ObservableObject {
         }
     }
 
-    /// Clear UI state and delete the temp file (user dismissed the attachment)
+    /// Clear UI state and delete temp files (user dismissed the attachment)
     func clear() {
         pendingImage = nil
-        if let path = pendingImagePath {
+        for path in pendingImagePaths {
             try? FileManager.default.removeItem(atPath: path)
         }
         pendingImagePath = nil
+        pendingImagePaths = []
     }
 
-    /// Clear UI state but keep the temp file (it was sent — Claude still needs to read it)
+    /// Clear UI state but keep temp files (they were sent — Claude still needs to read them)
     func clearForSend() {
         pendingImage = nil
         pendingImagePath = nil
+        pendingImagePaths = []
     }
 }

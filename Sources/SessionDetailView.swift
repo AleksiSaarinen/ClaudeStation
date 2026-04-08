@@ -40,20 +40,22 @@ struct SessionDetailView: View {
                             inputFocused: $inputFocused,
                             session: session,
                             attachedImage: pasteboardWatcher.pendingImage,
-                            hasAttachment: pasteboardWatcher.pendingImagePath != nil,
+                            hasAttachment: !pasteboardWatcher.pendingImagePaths.isEmpty,
                             onRemoveAttachment: {
                                 withAnimation(.easeInOut(duration: 0.15)) {
                                     pasteboardWatcher.clear()
                                 }
                             },
                             onSend: {
-                                guard !inputText.isEmpty || pasteboardWatcher.pendingImagePath != nil else { return }
+                                let hasPendingImages = !pasteboardWatcher.pendingImagePaths.isEmpty
+                                guard !inputText.isEmpty || hasPendingImages else { return }
                                 var message = inputText
-                                if let path = pasteboardWatcher.pendingImagePath {
-                                    let prefix = message.isEmpty ? "" : "\n"
-                                    message += "\(prefix)[Image: \(path)]"
-                                    pasteboardWatcher.clearForSend()
+                                // Append all pending image paths
+                                for path in pasteboardWatcher.pendingImagePaths {
+                                    let sep = message.isEmpty ? "" : "\n"
+                                    message += "\(sep)[Image: \(path)]"
                                 }
+                                pasteboardWatcher.clearForSend()
                                 if session.status == .waitingForInput || session.status == .idle {
                                     sessionManager.sendImmediately(message, to: session)
                                 } else {
@@ -101,19 +103,23 @@ struct SessionDetailView: View {
                 }
             }
             .onDrop(of: [.image, .fileURL], isTargeted: $isDragOver) { providers in
-                for provider in providers {
+                for (i, provider) in providers.enumerated() {
                     // Try image first
                     if provider.hasItemConformingToTypeIdentifier("public.image") {
                         provider.loadObject(ofClass: NSImage.self) { image, _ in
                             guard let image = image as? NSImage else { return }
-                            let path = NSTemporaryDirectory() + "claudestation_drop_\(Int(Date().timeIntervalSince1970)).png"
+                            let path = NSTemporaryDirectory() + "claudestation_drop_\(Int(Date().timeIntervalSince1970))_\(i).png"
                             if let tiff = image.tiffRepresentation,
                                let bmp = NSBitmapImageRep(data: tiff),
                                let png = bmp.representation(using: .png, properties: [:]) {
                                 try? png.write(to: URL(fileURLWithPath: path))
                                 DispatchQueue.main.async {
-                                    self.pasteboardWatcher.pendingImage = image
+                                    // First image shows as thumbnail preview
+                                    if self.pasteboardWatcher.pendingImage == nil {
+                                        self.pasteboardWatcher.pendingImage = image
+                                    }
                                     self.pasteboardWatcher.pendingImagePath = path
+                                    self.pasteboardWatcher.pendingImagePaths.append(path)
                                 }
                             }
                         }
@@ -121,16 +127,18 @@ struct SessionDetailView: View {
                     // Handle file URLs — any file or folder
                     provider.loadObject(ofClass: URL.self) { url, _ in
                         guard let url = url else { return }
-                        // If it's an image, the handler above already got it
                         if let image = NSImage(contentsOf: url), image.size.width > 10 {
-                            let path = NSTemporaryDirectory() + "claudestation_drop_\(url.lastPathComponent)"
-                            try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: path))
+                            let destPath = NSTemporaryDirectory() + "claudestation_drop_\(url.lastPathComponent)"
+                            if !FileManager.default.fileExists(atPath: destPath) {
+                                try? FileManager.default.copyItem(atPath: url.path, toPath: destPath)
+                            }
                             DispatchQueue.main.async {
-                                self.pasteboardWatcher.pendingImage = image
-                                self.pasteboardWatcher.pendingImagePath = path
+                                if self.pasteboardWatcher.pendingImage == nil {
+                                    self.pasteboardWatcher.pendingImage = image
+                                }
+                                self.pasteboardWatcher.pendingImagePaths.append(destPath)
                             }
                         } else {
-                            // Non-image file or folder — add path to input
                             DispatchQueue.main.async {
                                 let sep = self.inputText.isEmpty ? "" : "\n"
                                 self.inputText += "\(sep)[File: \(url.path)]"

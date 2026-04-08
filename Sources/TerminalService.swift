@@ -61,15 +61,20 @@ class TerminalService {
         // to use the Read tool on the file, since `claude -p` has no --image flag.
         var promptText = text
 
-        // Extract [Image: path] → instruct Claude to Read the image
-        if let range = text.range(of: "\\[Image: [^\\]]+\\]", options: .regularExpression),
-           let pathRange = text.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression) {
-            let imagePath = String(text[pathRange])
-            let userText = text.replacingCharacters(in: range, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if userText.isEmpty {
-                promptText = "Read and look at the image file at \(imagePath) and describe what you see."
+        // Extract all [Image: path] tags → instruct Claude to Read each image
+        var imagePaths: [String] = []
+        while let pathRange = promptText.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression),
+              let fullRange = promptText.range(of: "\\[Image: [^\\]]+\\]", options: .regularExpression) {
+            imagePaths.append(String(promptText[pathRange]))
+            promptText = promptText.replacingCharacters(in: fullRange, with: "")
+        }
+        promptText = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !imagePaths.isEmpty {
+            let imageInstructions = imagePaths.map { "Read and look at the image file at \($0)" }.joined(separator: ". ")
+            if promptText.isEmpty {
+                promptText = imageInstructions + " and describe what you see."
             } else {
-                promptText = "Read and look at the image file at \(imagePath). \(userText)"
+                promptText = imageInstructions + ". " + promptText
             }
         }
 
