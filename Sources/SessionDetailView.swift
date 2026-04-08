@@ -505,12 +505,7 @@ struct InputBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(theme.inputBg.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 20))
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(theme.inputBorder, lineWidth: 1)
-            )
             .modifier(LiquidGlassChrome(cornerRadius: 20))
         }
         .padding(.horizontal, 12)

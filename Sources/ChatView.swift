@@ -4,6 +4,7 @@ struct ChatView: View {
     @ObservedObject var session: Session
     @Environment(\.theme) var theme
     @State private var lastScrollTime: Date = .distantPast
+    @State private var chatScrollView: NSScrollView?
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -18,6 +19,15 @@ struct ChatView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
+                // Capture reference to the parent NSScrollView
+                ScrollViewFinder { sv in
+                    chatScrollView = sv
+                    // Scroll to bottom as soon as we have the reference
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        scrollToBottom()
+                    }
+                }
+                .frame(height: 0)
                 if session.chatMessages.isEmpty && session.status != .idle {
                     WelcomeCard(session: session)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
@@ -63,7 +73,6 @@ struct ChatView: View {
             .padding(.bottom, 12)
         }
         .scrollContentBackground(.hidden)
-        .defaultScrollAnchor(.bottom)
         .background(Color.clear)
         .onChange(of: session.chatMessages.count) { _, _ in
             scrollToBottom()
@@ -78,27 +87,25 @@ struct ChatView: View {
             scrollToBottom()
         }
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                scrollToBottom()
-            }
+            scrollToBottom()
         }
     }
 
-    /// Scroll the underlying NSScrollView to the bottom. Reliable, no SwiftUI proxy issues.
+    /// Scroll the underlying NSScrollView to the bottom.
     private func scrollToBottom() {
         let now = Date()
         guard now.timeIntervalSince(lastScrollTime) > 0.05 else { return }
         lastScrollTime = now
 
         DispatchQueue.main.async {
-            guard let scrollView = NSApp.keyWindow?.contentView?.findScrollView() else { return }
-            let clipView = scrollView.contentView
-            let docView = scrollView.documentView!
-            let maxY = docView.frame.height - clipView.bounds.height
-            if maxY > 0 {
-                clipView.scroll(to: NSPoint(x: 0, y: maxY))
-                scrollView.reflectScrolledClipView(clipView)
-            }
+            guard let scrollView = chatScrollView,
+                  let docView = scrollView.documentView else { return }
+            let contentHeight = docView.frame.height
+            let viewportHeight = scrollView.contentView.bounds.height
+            guard contentHeight > viewportHeight else { return }
+            let target = NSPoint(x: 0, y: contentHeight - viewportHeight)
+            scrollView.contentView.scroll(to: target)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
         }
     }
 }
@@ -106,12 +113,27 @@ struct ChatView: View {
 
 // MARK: - NSView helpers
 
-extension NSView {
-    /// Find the first NSScrollView in the view hierarchy (depth-first)
-    func findScrollView() -> NSScrollView? {
-        if let sv = self as? NSScrollView { return sv }
-        for sub in subviews {
-            if let found = sub.findScrollView() { return found }
+/// Invisible view that captures a reference to its parent NSScrollView
+struct ScrollViewFinder: NSViewRepresentable {
+    var onFound: (NSScrollView) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let scrollView = Self.findParentScrollView(of: view) {
+                onFound(scrollView)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    static func findParentScrollView(of view: NSView) -> NSScrollView? {
+        var current: NSView? = view
+        while let v = current {
+            if let sv = v as? NSScrollView { return sv }
+            current = v.superview
         }
         return nil
     }
