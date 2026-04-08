@@ -5,6 +5,8 @@ struct ChatView: View {
     @Environment(\.theme) var theme
     @State private var lastScrollTime: Date = .distantPast
     @State private var chatScrollView: NSScrollView?
+    @State private var userScrolledUp = false
+    @State private var scrollObservers: [NSObjectProtocol] = []
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -22,7 +24,7 @@ struct ChatView: View {
                 // Capture reference to the parent NSScrollView
                 ScrollViewFinder { sv in
                     chatScrollView = sv
-                    // Scroll to bottom as soon as we have the reference
+                    observeUserScroll(sv)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         scrollToBottom()
                     }
@@ -70,25 +72,90 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 60)
+            .padding(.bottom, session.messageQueue.isEmpty ? 60 : 120)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: session.chatMessages.count)
+            .animation(.easeInOut(duration: 0.25), value: session.assistantState)
         }
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .onChange(of: session.chatMessages.count) { _, _ in
-            scrollToBottom()
+        .onChange(of: session.chatMessages.count) { old, new in
+            // User sent a message → reset and scroll
+            if new > old, let last = session.chatMessages.last, last.role == .user {
+                userScrolledUp = false
+            }
+            if !userScrolledUp { scrollToBottom() }
         }
         .onChange(of: lastMessageContent) { _, _ in
-            scrollToBottom()
+            if !userScrolledUp { scrollToBottom() }
         }
         .onChange(of: lastMessageBlockCount) { _, _ in
-            scrollToBottom()
+            if !userScrolledUp { scrollToBottom() }
         }
         .onChange(of: session.assistantState) { _, _ in
-            scrollToBottom()
+            if !userScrolledUp { scrollToBottom() }
         }
         .onAppear {
             scrollToBottom()
         }
+        .onDisappear {
+            // Clean up notification observers
+            for observer in scrollObservers {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            scrollObservers = []
+        }
+        .overlay(alignment: .bottom) {
+            if userScrolledUp && !session.chatMessages.isEmpty {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.chromeText)
+                    .frame(width: 32, height: 32)
+                    .background(theme.assistantBubble)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    .contentShape(Circle())
+                    .onTapGesture {
+                        userScrolledUp = false
+                        scrollToBottom()
+                    }
+                    .padding(.bottom, session.messageQueue.isEmpty ? 70 : 130)
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    .animation(.easeInOut(duration: 0.2), value: userScrolledUp)
+            }
+        }
+    }
+
+    /// Subscribe to NSScrollView live scroll notifications to detect user-initiated scrolls.
+    /// willStartLiveScroll/didLiveScroll only fire for user gestures (trackpad/mouse wheel),
+    /// NOT for programmatic scroll(to:) calls — this is the reliable way to distinguish them.
+    private func observeUserScroll(_ scrollView: NSScrollView) {
+        // Remove any previous observers
+        for observer in scrollObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        scrollObservers = []
+
+        let endObserver = NotificationCenter.default.addObserver(
+            forName: NSScrollView.didEndLiveScrollNotification,
+            object: scrollView,
+            queue: .main
+        ) { [self] _ in
+            if !isScrollViewAtBottom(scrollView) {
+                userScrolledUp = true
+            } else {
+                userScrolledUp = false
+            }
+        }
+        scrollObservers.append(endObserver)
+    }
+
+    private func isScrollViewAtBottom(_ scrollView: NSScrollView) -> Bool {
+        guard let docView = scrollView.documentView else { return true }
+        let contentHeight = docView.frame.height
+        let viewportHeight = scrollView.contentView.bounds.height
+        let offsetY = scrollView.contentView.bounds.origin.y
+        return offsetY + viewportHeight >= contentHeight - 30
     }
 
     /// Scroll the underlying NSScrollView to the bottom.
