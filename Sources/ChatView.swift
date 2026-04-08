@@ -53,8 +53,8 @@ struct ChatView: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                     }
 
-                    // Scroll anchor
-                    Color.clear.frame(height: 1).id("bottom")
+                    // Bottom spacer (not a scroll target)
+                    Color.clear.frame(height: 1)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
@@ -66,31 +66,27 @@ struct ChatView: View {
             .modifier(ScrollBottomDetector(isAtBottom: $isAtBottom))
             .onAppear {
                 if !session.chatMessages.isEmpty {
-                    // Multiple scroll attempts as layout settles
                     for delay in [0.1, 0.3, 0.7, 1.2] {
                         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                            proxy.scrollTo("bottom")
+                            scrollToLastItem(proxy: proxy)
                         }
                     }
                 }
             }
             .onChange(of: session.chatMessages.count) { _, _ in
-                // New message — always scroll
-                scrollToEnd(proxy: proxy)
+                if isAtBottom { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: lastMessageContent) { _, _ in
-                // Streaming text — scroll if at bottom
                 if isAtBottom { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: lastMessageBlockCount) { _, _ in
-                // New tool use block — always scroll
-                scrollToEnd(proxy: proxy)
+                if isAtBottom { scrollToEnd(proxy: proxy) }
             }
             .onChange(of: session.assistantState) { _, _ in
-                scrollToEnd(proxy: proxy)
+                if isAtBottom { scrollToEnd(proxy: proxy) }
             }
             .onReceive(NotificationCenter.default.publisher(for: .init("ScrollToBottom"))) { _ in
-                scrollToEnd(proxy: proxy)
+                scrollToLastItem(proxy: proxy)
             }
         } // ScrollViewReader
 
@@ -122,11 +118,19 @@ struct ChatView: View {
     }
 
     /// Scroll to bottom, throttled to ~100ms to avoid layout thrashing during streaming.
+    private func scrollToLastItem(proxy: ScrollViewProxy) {
+        if case .thinking = session.assistantState {
+            proxy.scrollTo("thinking", anchor: .bottom)
+        } else if let lastId = session.chatMessages.last?.id {
+            proxy.scrollTo(lastId, anchor: .bottom)
+        }
+    }
+
     private func scrollToEnd(proxy: ScrollViewProxy) {
         let now = Date()
         guard now.timeIntervalSince(lastScrollTime) > 0.1 else { return }
         lastScrollTime = now
-        proxy.scrollTo("bottom")
+        scrollToLastItem(proxy: proxy)
     }
 }
 

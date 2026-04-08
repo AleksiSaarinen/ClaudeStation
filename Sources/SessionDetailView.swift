@@ -20,6 +20,9 @@ struct SessionDetailView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            if activeTab == .minigame {
+                MinigameView(bridge: minigameBridge)
+            } else {
             ChatView(session: session)
                 .contentShape(Rectangle())
                 .onTapGesture { inputFocused = true }
@@ -139,6 +142,7 @@ struct SessionDetailView: View {
             }
             .animation(.easeInOut(duration: 0.2), value: isDragOver)
         }
+            } // end else (terminal tab)
         .overlay {
             if showImagePreview, let img = pasteboardWatcher.pendingImage {
                 Color.black.opacity(0.6)
@@ -499,7 +503,7 @@ struct InputBar: View {
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(theme.inputBorder, lineWidth: 1)
             )
-            .modifier(LiquidGlassChrome())
+            .modifier(LiquidGlassChrome(cornerRadius: 20))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)

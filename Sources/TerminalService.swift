@@ -42,11 +42,11 @@ class TerminalService {
 
     // MARK: - Send Message
 
-    func send(text: String, to session: Session) {
+    func send(text: String, to session: Session, force: Bool = false) {
         guard !text.isEmpty else { return }
 
-        // Prevent concurrent processes — queue if busy
-        if session.activeProcess != nil {
+        // Prevent concurrent processes — queue if busy (unless force-sending from queue)
+        if !force && session.activeProcess != nil {
             session.messageQueue.append(QueuedMessage(text: text))
             return
         }

@@ -123,7 +123,7 @@ class SessionManager: ObservableObject {
     
     /// Send a message — TerminalService handles queueing if busy
     func sendImmediately(_ text: String, to session: Session) {
-        TerminalService.shared.send(text: text, to: session)
+        TerminalService.shared.send(text: text, to: session, force: true)
         scheduleSave()
     }
 

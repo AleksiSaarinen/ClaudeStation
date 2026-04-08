@@ -89,6 +89,11 @@ struct ContentView: View {
         .keyboardShortcut(KeyEquivalent("k"), modifiers: .command, action: {
             showCommandPalette.toggle()
         })
+        .keyboardShortcut(.escape, modifiers: [], action: {
+            if let session = sessionManager.activeSession, session.status == .running {
+                TerminalService.shared.terminate(session: session)
+            }
+        })
         .onChange(of: draggingSessionId) { _, newValue in
             if newValue != nil { pollForDragEnd() }
         }
