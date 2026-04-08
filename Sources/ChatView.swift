@@ -18,7 +18,7 @@ struct ChatView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                 // Capture reference to the parent NSScrollView
                 ScrollViewFinder { sv in
                     chatScrollView = sv
@@ -70,7 +70,7 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 12)
+            .padding(.bottom, 60)
         }
         .scrollContentBackground(.hidden)
         .background(Color.clear)
