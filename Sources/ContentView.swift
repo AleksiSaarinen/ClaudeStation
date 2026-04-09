@@ -24,19 +24,23 @@ struct ContentView: View {
             }
 
             VStack(spacing: 0) {
-                TabBar(draggingSessionId: $draggingSessionId)
-
                 // Content area — also a drop target for tear-off
                 ZStack {
                     if let session = sessionManager.activeSession {
                         SessionDetailView(session: session)
                             .id(session.id)
+                            .safeAreaInset(edge: .top, spacing: 0) {
+                                TabBar(draggingSessionId: $draggingSessionId)
+                            }
                     } else {
                         VStack {
                             Spacer()
                             Text("No session")
                                 .foregroundStyle(theme.mutedText)
                             Spacer()
+                        }
+                        .safeAreaInset(edge: .top, spacing: 0) {
+                            TabBar(draggingSessionId: $draggingSessionId)
                         }
                     }
 
@@ -148,6 +152,8 @@ struct WindowFrameSaver: NSViewRepresentable {
             guard !didSet, let window else { return }
             didSet = true
             window.setFrameAutosaveName(autosaveName)
+            window.titlebarAppearsTransparent = false
+            window.isMovableByWindowBackground = true
         }
     }
 }
@@ -196,7 +202,7 @@ struct TabBar: View {
             .padding(.vertical, 2)
         }
         .frame(height: 36)
-        .background(theme.chromeBar.opacity(0.3))
+        .modifier(LiquidGlassChrome())
     }
 
     @ViewBuilder
@@ -258,8 +264,9 @@ struct SessionTab: View {
                 .onExitCommand { isEditing = false }
             } else {
                 Text(session.displayName)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.caption, design: .monospaced).bold())
                     .foregroundStyle(isActive ? theme.assistantText : theme.chromeText)
+                    .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(minWidth: 40, maxWidth: 140)

@@ -18,6 +18,20 @@ struct ChatView: View {
         session.chatMessages.last?.blocks.count ?? 0
     }
 
+    /// Check if the last assistant message looks like a completed plan (not a permission request)
+    private var lastMessageLooksLikePlan: Bool {
+        guard let last = session.chatMessages.last else { return false }
+        let hasExitPlanMode = last.blocks.contains { block in
+            if case .toolUse(let name, _) = block.kind { return name == "ExitPlanMode" }
+            return false
+        }
+        let hasPlanWrite = last.blocks.contains { block in
+            if case .toolUse(let name, _) = block.kind { return name == "Write" }
+            return false
+        }
+        return hasExitPlanMode || hasPlanWrite
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -62,10 +76,12 @@ struct ChatView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                 }
 
-                // Execute Plan button — shows after plan mode response
+                // Execute Plan button — only shows when Claude finished a plan
+                // (contains ExitPlanMode or a plan file write, not permission requests)
                 if session.planMode
                     && session.status == .waitingForInput
-                    && session.chatMessages.last?.role == .assistant {
+                    && session.chatMessages.last?.role == .assistant
+                    && lastMessageLooksLikePlan {
                     ExecutePlanButton(session: session)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
@@ -393,7 +409,13 @@ struct AssistantMessageRow: View {
                                 case .text(let text):
                                     MarkdownText(text: text)
                                 case .toolUse(let name, _):
-                                    ToolUseCard(name: name, input: block.toolInput)
+                                    if name == "Write",
+                                       let path = block.toolInput["file_path"] as? String,
+                                       path.contains(".claude/plans/") {
+                                        PlanCard(input: block.toolInput)
+                                    } else {
+                                        ToolUseCard(name: name, input: block.toolInput)
+                                    }
                                 case .toolResult(let content):
                                     ToolResultCard(content: content)
                                 }
@@ -746,6 +768,100 @@ struct ToolResultCard: View {
     }
 }
 
+// MARK: - Plan Card
+
+struct PlanCard: View {
+    let input: [String: Any]
+    @Environment(\.theme) var theme
+    @State private var expanded = false
+
+    private var filePath: String {
+        input["file_path"] as? String ?? "plan.md"
+    }
+
+    private var fileName: String {
+        (filePath as NSString).lastPathComponent
+    }
+
+    /// Read plan content from the file on disk (it was written by Claude)
+    private var planContent: String {
+        if let content = input["content"] as? String, !content.isEmpty {
+            return content
+        }
+        // Fallback: try reading from disk
+        return (try? String(contentsOfFile: filePath, encoding: .utf8)) ?? ""
+    }
+
+    /// Extract headers and top-level bullets as summary
+    private var summary: [String] {
+        planContent.components(separatedBy: "\n")
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return trimmed.hasPrefix("#") || trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ")
+            }
+            .prefix(12)
+            .map { String($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(theme.accent)
+                Text("Plan: \(fileName)")
+                    .font(.system(.caption, design: .monospaced).bold())
+                    .foregroundStyle(theme.accent)
+                Spacer()
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(theme.mutedText)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+            }
+
+            // Summary (always visible)
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(summary.enumerated()), id: \.offset) { _, line in
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("#") {
+                        Text(trimmed.replacingOccurrences(of: "^#+\\s*", with: "", options: .regularExpression))
+                            .font(.system(.caption, design: .monospaced).bold())
+                            .foregroundStyle(theme.assistantText)
+                    } else {
+                        Text(trimmed)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(theme.assistantText.opacity(0.8))
+                    }
+                }
+            }
+
+            // Full content (expanded)
+            if expanded {
+                Divider()
+                ScrollView {
+                    Text(planContent)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(theme.assistantText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .padding(10)
+        .background(theme.accent.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(theme.accent.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
 // MARK: - Execute Plan Button
 
 struct ExecutePlanButton: View {
@@ -756,6 +872,8 @@ struct ExecutePlanButton: View {
     var body: some View {
         HStack(spacing: 12) {
             Button {
+                // Disable plan mode so execution runs with full permissions
+                session.planMode = false
                 sessionManager.sendImmediately("Go ahead and execute the plan.", to: session)
             } label: {
                 HStack(spacing: 6) {
@@ -764,7 +882,7 @@ struct ExecutePlanButton: View {
                     Text("Execute Plan")
                         .font(.system(.caption, weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(theme.assistantBubble)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(theme.accent)
