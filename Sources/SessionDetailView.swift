@@ -17,6 +17,7 @@ struct SessionDetailView: View {
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
     @State private var taskStartTime: Date?
+    @StateObject private var updateChecker = UpdateChecker()
     
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +41,7 @@ struct SessionDetailView: View {
                             inputFocused: $inputFocused,
                             session: session,
                             attachedImage: pasteboardWatcher.pendingImage,
+                            attachedImagePaths: pasteboardWatcher.pendingImagePaths,
                             hasAttachment: !pasteboardWatcher.pendingImagePaths.isEmpty,
                             onRemoveAttachment: {
                                 withAnimation(.easeInOut(duration: 0.15)) {
@@ -197,6 +199,23 @@ struct SessionDetailView: View {
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
+            if updateChecker.updateAvailable {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        updateChecker.restart()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .overlay(alignment: .topTrailing) {
+                                Circle()
+                                    .fill(.green)
+                                    .frame(width: 6, height: 6)
+                                    .offset(x: 2, y: -2)
+                            }
+                    }
+                    .help("New build available — click to restart")
+                }
+            }
+
             ToolbarItem(placement: .automatic) {
                 SettingsLink {
                     Label("Settings", systemImage: "gearshape")
@@ -399,6 +418,7 @@ struct InputBar: View {
     var inputFocused: FocusState<Bool>.Binding
     @ObservedObject var session: Session
     var attachedImage: NSImage? = nil
+    var attachedImagePaths: [String] = []
     var hasAttachment: Bool = false
     var onRemoveAttachment: () -> Void = {}
     var onSend: () -> Void
@@ -416,7 +436,31 @@ struct InputBar: View {
             // Input field in rounded container
             VStack(alignment: .leading, spacing: 8) {
                 // Attached images inside the pill
-                if let img = attachedImage {
+                if !attachedImagePaths.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(attachedImagePaths, id: \.self) { path in
+                            if let img = NSImage(contentsOfFile: path) {
+                                Image(nsImage: img)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(theme.toolCardBorder, lineWidth: 1)
+                                    )
+                            }
+                        }
+                        Button(action: onRemoveAttachment) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white)
+                                .background(Circle().fill(.black.opacity(0.6)).frame(width: 12, height: 12))
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                    }
+                } else if let img = attachedImage {
                     HStack(spacing: 8) {
                         ZStack(alignment: .topTrailing) {
                             Image(nsImage: img)
@@ -428,9 +472,6 @@ struct InputBar: View {
                                     RoundedRectangle(cornerRadius: 8)
                                         .stroke(theme.toolCardBorder, lineWidth: 1)
                                 )
-                                .onTapGesture { showImagePreview = true }
-                                .cursor(.pointingHand)
-
                             Button(action: onRemoveAttachment) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 14))
@@ -447,16 +488,16 @@ struct InputBar: View {
             HStack(alignment: .center, spacing: 8) {
                 // Pixel pet mascot
                 PetView(session: session)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
 
                 // Plus button for attachments
                 Button(action: onAttach) {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(theme.mutedText)
+                        .foregroundStyle(theme.chromeText)
                         .frame(width: 28, height: 28)
-                        .background(theme.inputBg)
+                        .background(theme.chromeText.opacity(0.25))
                         .clipShape(Circle())
-                        .overlay(Circle().stroke(theme.inputBorder, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .help("Attach file")
@@ -473,17 +514,17 @@ struct InputBar: View {
                 // Right side buttons
                 HStack(spacing: 6) {
                     // Plan mode toggle
+                    // Plan mode toggle
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) { session.planMode.toggle() }
                     } label: {
                         Text("Plan")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(session.planMode ? theme.userBubbleText : theme.mutedText)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(session.planMode ? theme.accent : theme.inputBg)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(session.planMode ? theme.assistantBubble : theme.chromeText)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(session.planMode ? theme.accent : theme.chromeText.opacity(0.25))
                             .clipShape(Capsule())
-                            .overlay(Capsule().stroke(session.planMode ? theme.accent : theme.inputBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .help("Toggle plan mode")
@@ -492,9 +533,9 @@ struct InputBar: View {
                     Button(action: onSend) {
                         Image(systemName: isReady ? "arrow.up" : "tray.and.arrow.down")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.mutedText : theme.assistantBubble)
+                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.chromeText : theme.assistantBubble)
                             .frame(width: 28, height: 28)
-                            .background(inputText.isEmpty && !hasAttachment ? theme.inputBg : theme.accent)
+                            .background(inputText.isEmpty && !hasAttachment ? theme.chromeText.opacity(0.25) : theme.accent)
                             .clipShape(Circle())
                     }
                     .buttonStyle(.plain)

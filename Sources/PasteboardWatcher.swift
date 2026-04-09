@@ -83,6 +83,7 @@ class PasteboardWatcher: ObservableObject {
             DispatchQueue.main.async {
                 self.pendingImage = image
                 self.pendingImagePath = path
+                self.pendingImagePaths.append(path)
             }
         }
     }

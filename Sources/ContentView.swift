@@ -15,10 +15,7 @@ struct ContentView: View {
         ZStack {
             // Animated background extends behind tab bar
             if let session = sessionManager.activeSession {
-                theme.chatBackground(
-                    toolName: session.lastToolName,
-                    isRunning: session.status == .running
-                ).ignoresSafeArea()
+                SessionBackground(session: session, theme: theme)
             } else {
                 theme.chatBackground.ignoresSafeArea()
             }
@@ -170,6 +167,20 @@ extension View {
     }
 }
 
+// MARK: - Session Background (observes session for reactive particles)
+
+struct SessionBackground: View {
+    @ObservedObject var session: Session
+    let theme: Theme
+
+    var body: some View {
+        theme.chatBackground(
+            toolName: session.lastToolName,
+            isRunning: session.status == .running
+        ).ignoresSafeArea()
+    }
+}
+
 // MARK: - Tab Bar
 
 struct TabBar: View {
@@ -247,10 +258,22 @@ struct SessionTab: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            // Status dot
+            // Status dot — pulses when running
             Circle()
                 .fill(dotColor)
                 .frame(width: 6, height: 6)
+                .overlay(
+                    Circle()
+                        .stroke(dotColor, lineWidth: 1.5)
+                        .scaleEffect(session.status == .running ? 2.0 : 1.0)
+                        .opacity(session.status == .running ? 0 : 1)
+                        .animation(
+                            session.status == .running
+                                ? .easeOut(duration: 1.0).repeatForever(autoreverses: false)
+                                : .default,
+                            value: session.status
+                        )
+                )
 
             // Name (editable on double-click)
             if isEditing {

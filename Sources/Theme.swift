@@ -70,19 +70,7 @@ struct AnimatedGradientBackground: View {
     let theme: Theme
     var toolName: String?
     var isRunning: Bool
-    @State private var particles: [Particle] = (0..<25).map { _ in
-        Particle(
-            x: Double.random(in: 0...1),
-            y: Double.random(in: 0...1),
-            size: Double.random(in: 1.5...3.5),
-            opacity: Double.random(in: 0.5...1.0),
-            speedX: Double.random(in: -0.003...0.003),
-            speedY: Double.random(in: 0.002...0.008),
-            phase: Double.random(in: 0...(.pi * 2)),
-            phaseSpeed: Double.random(in: 0.3...1.2),
-            life: 1.0
-        )
-    }
+    @State private var particles: [Particle] = Self.makeParticles(count: 60)
     @State private var startTime: Date = .now
 
     struct Particle {
@@ -113,9 +101,30 @@ struct AnimatedGradientBackground: View {
         }
     }
 
+    static func makeParticles(count: Int) -> [Particle] {
+        (0..<count).map { _ in
+            Particle(
+                x: Double.random(in: 0...1),
+                y: Double.random(in: 0...1),
+                size: Double.random(in: 0.8...3.0),
+                opacity: Double.random(in: 0.3...1.0),
+                speedX: Double.random(in: -0.005...0.005),
+                speedY: Double.random(in: 0.003...0.015),
+                phase: Double.random(in: 0...(.pi * 2)),
+                phaseSpeed: Double.random(in: 0.5...2.0),
+                life: 1.0
+            )
+        }
+    }
+
     /// Particle speed multiplier based on activity
     private var speedMult: Double {
-        isRunning ? 1.8 : 1.0
+        isRunning ? 30.0 : 0.8
+    }
+
+    /// Particle vertical direction: positive = rise up (active), negative = drift down (idle)
+    private var particleDirection: Double {
+        isRunning ? -1.0 : 1.0
     }
 
     /// Blob opacity changes with activity
@@ -173,9 +182,11 @@ struct AnimatedGradientBackground: View {
                     let p = particles[i]
                     let elapsed = t * p.phaseSpeed
                     // Position wraps 0…1 using modulo
-                    var wx = (p.x + p.speedX * t * speedMult + sin(elapsed + p.phase) * 0.02)
+                    // Active: fast straight rise with tiny horizontal jitter. Idle: gentle drift.
+                    let wobbleX = isRunning ? sin(elapsed * 2 + p.phase) * 0.008 : sin(elapsed + p.phase) * 0.02
+                    var wx = (p.x + p.speedX * t * (isRunning ? 0.3 : speedMult) + wobbleX)
                         .truncatingRemainder(dividingBy: 1.0)
-                    var wy = (p.y - p.speedY * t * speedMult + cos(elapsed + p.phase) * 0.015)
+                    var wy = (p.y + p.speedY * t * speedMult * particleDirection)
                         .truncatingRemainder(dividingBy: 1.0)
                     if wx < 0 { wx += 1.0 }
                     if wy < 0 { wy += 1.0 }
@@ -185,25 +196,29 @@ struct AnimatedGradientBackground: View {
                         min(wx, 1.0 - wx) * 8,
                         min(wy, 1.0 - wy) * 8
                     ).clamped(to: 0...1)
-                    // Twinkle
-                    let twinkle = 0.5 + 0.5 * sin(t * p.phaseSpeed * 2 + p.phase)
+                    // Twinkle — carbonated fizz when running, gentle pulse when idle
+                    let twinkleSpeed = isRunning ? p.phaseSpeed * 6 : p.phaseSpeed * 2
+                    let twinkle = isRunning ? 0.6 + 0.4 * sin(t * twinkleSpeed + p.phase) : 0.4 + 0.6 * sin(t * twinkleSpeed + p.phase)
+                    let sizeScale = isRunning ? 1.0 + 0.3 * sin(t * p.phaseSpeed * 3 + p.phase) : 1.0
                     let alpha = p.opacity * edgeFade * twinkle
 
                     let screenX = wx * size.width
                     let screenY = wy * size.height
-                    let r = p.size
+                    let r = p.size * sizeScale
 
-                    // Glow
+                    // Glow — bigger and brighter when active
+                    let glowMult = isRunning ? 3.0 : 2.0
+                    let glowAlpha = isRunning ? alpha * 0.7 : alpha * 0.5
                     context.fill(
-                        Path(ellipseIn: CGRect(x: screenX - r * 2, y: screenY - r * 2, width: r * 4, height: r * 4)),
+                        Path(ellipseIn: CGRect(x: screenX - r * glowMult, y: screenY - r * glowMult, width: r * glowMult * 2, height: r * glowMult * 2)),
                         with: .radialGradient(
                             Gradient(colors: [
-                                Color(nsColor: accentColor.withAlphaComponent(alpha * 0.5)),
+                                Color(nsColor: accentColor.withAlphaComponent(glowAlpha)),
                                 .clear
                             ]),
                             center: CGPoint(x: screenX, y: screenY),
                             startRadius: 0,
-                            endRadius: r * 2
+                            endRadius: r * glowMult
                         )
                     )
 

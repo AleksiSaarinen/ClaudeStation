@@ -7,6 +7,7 @@ struct ChatView: View {
     @State private var chatScrollView: NSScrollView?
     @State private var userScrolledUp = false
     @State private var scrollObservers: [NSObjectProtocol] = []
+    @State private var isProgrammaticScroll = false
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -34,7 +35,7 @@ struct ChatView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 // Capture reference to the parent NSScrollView
                 ScrollViewFinder { sv in
                     chatScrollView = sv
@@ -126,44 +127,49 @@ struct ChatView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(theme.chromeText)
                     .frame(width: 32, height: 32)
-                    .background(theme.assistantBubble)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(theme.chromeBorder, lineWidth: 1))
-                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    .modifier(LiquidGlassChrome())
+                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
                     .contentShape(Circle())
                     .onTapGesture {
                         userScrolledUp = false
                         scrollToBottom()
                     }
-                    .padding(.bottom, session.messageQueue.isEmpty ? 70 : 130)
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                    .animation(.easeInOut(duration: 0.2), value: userScrolledUp)
+                    .padding(.bottom, 12)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.5).combined(with: .opacity).animation(.spring(response: 0.3, dampingFraction: 0.7)),
+                        removal: .scale(scale: 0.8).combined(with: .opacity).animation(.easeOut(duration: 0.15))
+                    ))
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: userScrolledUp)
     }
 
-    /// Subscribe to NSScrollView live scroll notifications to detect user-initiated scrolls.
-    /// willStartLiveScroll/didLiveScroll only fire for user gestures (trackpad/mouse wheel),
-    /// NOT for programmatic scroll(to:) calls — this is the reliable way to distinguish them.
+    /// Subscribe to NSScrollView clip view bounds changes to detect user scrolls.
+    /// Uses isProgrammaticScroll flag to distinguish user vs code scrolls.
     private func observeUserScroll(_ scrollView: NSScrollView) {
-        // Remove any previous observers
         for observer in scrollObservers {
             NotificationCenter.default.removeObserver(observer)
         }
         scrollObservers = []
 
-        let endObserver = NotificationCenter.default.addObserver(
-            forName: NSScrollView.didEndLiveScrollNotification,
-            object: scrollView,
+        // Enable bounds change notifications on the clip view
+        scrollView.contentView.postsBoundsChangedNotifications = true
+
+        let boundsObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
             queue: .main
         ) { [self] _ in
-            if !isScrollViewAtBottom(scrollView) {
-                userScrolledUp = true
-            } else {
+            // Skip if this was triggered by our own scrollToBottom()
+            guard !isProgrammaticScroll else { return }
+
+            if isScrollViewAtBottom(scrollView) {
                 userScrolledUp = false
+            } else {
+                userScrolledUp = true
             }
         }
-        scrollObservers.append(endObserver)
+        scrollObservers.append(boundsObserver)
     }
 
     private func isScrollViewAtBottom(_ scrollView: NSScrollView) -> Bool {
@@ -183,12 +189,21 @@ struct ChatView: View {
         DispatchQueue.main.async {
             guard let scrollView = chatScrollView,
                   let docView = scrollView.documentView else { return }
-            let contentHeight = docView.frame.height
-            let viewportHeight = scrollView.contentView.bounds.height
-            guard contentHeight > viewportHeight else { return }
-            let target = NSPoint(x: 0, y: contentHeight - viewportHeight)
-            scrollView.contentView.scroll(to: target)
+            // Use the document view's actual visible rect to find the real bottom
+            // This avoids LazyVStack estimated height issues
+            let visibleHeight = scrollView.contentView.bounds.height
+            let docHeight = docView.bounds.height
+            guard docHeight > visibleHeight else { return }
+            // Scroll the document view so its bottom edge aligns with viewport bottom
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight)
+            let currentY = scrollView.contentView.bounds.origin.y
+            guard currentY < target.y - 2 else { return } // Already at or past bottom
+            isProgrammaticScroll = true
+            scrollView.contentView.setBoundsOrigin(target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
+            DispatchQueue.main.async {
+                isProgrammaticScroll = false
+            }
         }
     }
 }
@@ -273,33 +288,38 @@ struct UserMessageRow: View {
         ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var imagePath: String? {
-        guard let range = message.content.range(of: "\\[Image: ([^\\]]+)\\]", options: .regularExpression),
-              let innerRange = message.content.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression)
-        else { return nil }
-        return String(message.content[innerRange])
+    private var imagePaths: [String] {
+        var paths: [String] = []
+        var text = message.content
+        while let range = text.range(of: "(?<=\\[Image: )[^\\]]+", options: .regularExpression) {
+            paths.append(String(text[range]))
+            // Move past this match
+            if let fullRange = text.range(of: "\\[Image: [^\\]]+\\]", options: .regularExpression) {
+                text = String(text[fullRange.upperBound...])
+            } else {
+                break
+            }
+        }
+        return paths
     }
 
     var body: some View {
         HStack {
             Spacer(minLength: 80)
             VStack(alignment: .trailing, spacing: 6) {
-                // Image preview if attached
-                if let path = imagePath, let image = NSImage(contentsOfFile: path) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: 200, maxHeight: 150)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .onTapGesture { showFullImage = true }
-                        .cursor(.pointingHand)
-                        .popover(isPresented: $showFullImage, arrowEdge: .leading) {
-                            Image(nsImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: 600, maxHeight: 500)
-                                .padding(8)
+                // Image previews
+                if !imagePaths.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(imagePaths, id: \.self) { path in
+                            if let image = NSImage(contentsOfFile: path) {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxWidth: 200, maxHeight: 150)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
                         }
+                    }
                 }
 
                 // Text content (without [Image: ...])
