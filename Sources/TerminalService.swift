@@ -243,7 +243,7 @@ class TerminalService {
                                         let cmd = (input["command"] as? String ?? "").prefix(50)
                                         return "Running: \(cmd)"
                                     case "Glob": return "Searching: \(input["pattern"] as? String ?? "files")..."
-                                    case "Grep": return "Grep: \(input["pattern"] as? String ?? "")..."
+                                    case "Grep": return "Searching: \(input["pattern"] as? String ?? "")..."
                                     case "Agent":
                                         let desc = input["description"] as? String ?? input["prompt"] as? String ?? "task"
                                         return "Agent: \(desc.prefix(40))..."

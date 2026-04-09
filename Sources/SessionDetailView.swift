@@ -486,9 +486,11 @@ struct InputBar: View {
                 }
 
             HStack(alignment: .center, spacing: 8) {
-                // Pixel pet mascot
-                PetView(session: session)
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                // Pixel pet mascot — only show when not thinking (it shows in the chat instead)
+                if case .thinking = session.assistantState {} else {
+                    PetView(session: session)
+                        .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                }
 
                 // Plus button for attachments
                 Button(action: onAttach) {
@@ -510,10 +512,10 @@ struct InputBar: View {
                     .focused(inputFocused)
                     .lineLimit(1...8)
                     .onSubmit { onSend() }
+                    .layoutPriority(1)
 
                 // Right side buttons
                 HStack(spacing: 6) {
-                    // Plan mode toggle
                     // Plan mode toggle
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) { session.planMode.toggle() }
@@ -542,6 +544,7 @@ struct InputBar: View {
                     .disabled(inputText.isEmpty && !hasAttachment)
                     .help(isReady ? "Send (Enter)" : "Queue (Enter)")
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
             }
             .padding(.horizontal, 12)

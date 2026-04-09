@@ -83,7 +83,6 @@ struct PetView: View {
 
     var body: some View {
         let frames = PetFrameCache.shared.framesFor(state: currentState)
-        let isActive = currentState != .idle && currentState != .sleepy
 
         Group {
             if !frames.isEmpty && currentFrame < frames.count {
@@ -98,8 +97,6 @@ struct PetView: View {
                     .frame(width: size, height: size)
             }
         }
-        .colorMultiply(isActive ? .white : theme.accent.opacity(0.8))
-        .animation(.easeInOut(duration: 0.3), value: isActive)
         .onAppear { updateState(); startAnimation() }
         .onDisappear { timer?.invalidate(); timer = nil }
         .onChange(of: session.status) { _, _ in updateState() }

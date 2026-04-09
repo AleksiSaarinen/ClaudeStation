@@ -72,7 +72,7 @@ struct ChatView: View {
                 }
 
                 if case .thinking(let text) = session.assistantState {
-                    ThinkingIndicator(text: text)
+                    ThinkingPetIndicator(session: session, text: text)
                         .id("thinking")
                         .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                 }
@@ -965,41 +965,24 @@ struct StreamingCursor: View {
 
 // MARK: - Thinking Indicator
 
-struct ThinkingIndicator: View {
+struct ThinkingPetIndicator: View {
+    @ObservedObject var session: Session
     let text: String
     @Environment(\.theme) var theme
-    @State private var dotCount = 0
-    @State private var timer: Timer?
 
     var body: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 3) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .fill(theme.accent)
-                        .frame(width: 5, height: 5)
-                        .scaleEffect(dotCount % 3 == i ? 1.3 : 0.7)
-                        .opacity(dotCount % 3 == i ? 1.0 : 0.3)
-                        .animation(.easeInOut(duration: 0.4), value: dotCount)
-                }
-            }
+            PetView(session: session)
+                .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                .transition(.scale(scale: 0.3).combined(with: .opacity))
             Text(text)
                 .font(theme.monoCaptionFont)
-                .foregroundStyle(theme.mutedText)
+                .foregroundStyle(theme.assistantText)
+                .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(theme.accent.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: theme.borderRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: theme.borderRadius)
-                .stroke(theme.accent.opacity(0.15), lineWidth: 1)
-        )
-        .onAppear {
-            timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { _ in dotCount += 1 }
-        }
-        .onDisappear {
-            timer?.invalidate()
-            timer = nil
-        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .modifier(LiquidGlassChrome(cornerRadius: 12))
     }
 }
