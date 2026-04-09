@@ -57,17 +57,29 @@ class UpdateChecker: ObservableObject {
     }
 
     func restart() {
-        // Re-run build.sh --force which kills and relaunches
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = ["-c", """
-            sleep 0.5
+        let buildAppPath = buildBinaryPath.replacingOccurrences(of: "/Contents/MacOS/ClaudeStation", with: "")
+        // Use nohup so the script survives app termination
+        let script = """
+            sleep 0.3
             killall -9 ClaudeStation 2>/dev/null
             sleep 0.5
-            cp -R "\(buildBinaryPath.replacingOccurrences(of: "/Contents/MacOS/ClaudeStation", with: ""))" /Applications/ClaudeStation.app
+            rm -rf /Applications/ClaudeStation.app
+            cp -R "\(buildAppPath)" /Applications/ClaudeStation.app
             open /Applications/ClaudeStation.app
-        """]
+        """
+        // Write script to temp file and execute detached
+        let scriptPath = NSTemporaryDirectory() + "claudestation_restart.sh"
+        try? script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/bash")
+        task.arguments = [scriptPath]
+        task.qualityOfService = .background
+        // Detach from parent process group so it survives our exit
+        task.arguments = ["-c", "nohup bash \(scriptPath) &"]
         try? task.run()
-        NSApp.terminate(nil)
+        // Give the script a moment to start, then exit
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.terminate(nil)
+        }
     }
 }
