@@ -35,7 +35,7 @@ struct ChatView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                 // Capture reference to the parent NSScrollView
                 ScrollViewFinder { sv in
                     chatScrollView = sv
@@ -51,7 +51,7 @@ struct ChatView: View {
                         .padding(.top, 20)
                 }
 
-                ForEach(session.chatMessages) { message in
+                ForEach(session.chatMessages.suffix(50)) { message in
                     if message.role == .user {
                         UserMessageRow(message: message)
                             .id(message.id)
@@ -89,7 +89,7 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, session.messageQueue.isEmpty ? 60 : 120)
+            .padding(.bottom, 8)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: session.chatMessages.count)
             .animation(.easeInOut(duration: 0.25), value: session.assistantState)
         }
@@ -174,10 +174,11 @@ struct ChatView: View {
 
     private func isScrollViewAtBottom(_ scrollView: NSScrollView) -> Bool {
         guard let docView = scrollView.documentView else { return true }
-        let contentHeight = docView.frame.height
+        let contentHeight = docView.bounds.height
         let viewportHeight = scrollView.contentView.bounds.height
         let offsetY = scrollView.contentView.bounds.origin.y
-        return offsetY + viewportHeight >= contentHeight - 30
+        let inputBarOffset: CGFloat = 56
+        return offsetY + viewportHeight >= contentHeight - 30 + inputBarOffset
     }
 
     /// Scroll the underlying NSScrollView to the bottom.
@@ -189,15 +190,14 @@ struct ChatView: View {
         DispatchQueue.main.async {
             guard let scrollView = chatScrollView,
                   let docView = scrollView.documentView else { return }
-            // Use the document view's actual visible rect to find the real bottom
-            // This avoids LazyVStack estimated height issues
             let visibleHeight = scrollView.contentView.bounds.height
             let docHeight = docView.bounds.height
             guard docHeight > visibleHeight else { return }
-            // Scroll the document view so its bottom edge aligns with viewport bottom
-            let target = NSPoint(x: 0, y: docHeight - visibleHeight)
+            // Add offset for the input bar safeAreaInset which overlaps the scroll view
+            let inputBarOffset: CGFloat = 56
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
             let currentY = scrollView.contentView.bounds.origin.y
-            guard currentY < target.y - 2 else { return } // Already at or past bottom
+            guard currentY < target.y - 1 else { return }
             isProgrammaticScroll = true
             scrollView.contentView.setBoundsOrigin(target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -692,7 +692,7 @@ struct ToolUseCard: View {
                 .font(.caption)
                 .foregroundStyle(toolColor)
                 .frame(width: 16)
-            Text(name)
+            Text(displayName)
                 .font(theme.monoCaptionFont.bold())
                 .foregroundStyle(toolColor)
             Text(toolSummary)
@@ -719,6 +719,19 @@ struct ToolUseCard: View {
         return ""
     }
 
+    var displayName: String {
+        switch name {
+        case "Grep", "Glob": return "Search"
+        case "Bash": return "Run"
+        case "WebFetch": return "Fetch"
+        case "WebSearch": return "Web Search"
+        case "Agent": return "Subagent"
+        case "ToolSearch": return "Tools"
+        case "ExitPlanMode": return "Plan Ready"
+        default: return name
+        }
+    }
+
     var toolIcon: String {
         switch name {
         case "Read": return "doc.text"
@@ -729,6 +742,8 @@ struct ToolUseCard: View {
         case "Grep": return "text.magnifyingglass"
         case "Agent": return "person.2"
         case "WebFetch", "WebSearch": return "globe"
+        case "ToolSearch": return "wrench.and.screwdriver"
+        case "ExitPlanMode": return "checkmark.circle"
         default: return "wrench"
         }
     }
