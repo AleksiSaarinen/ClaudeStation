@@ -486,11 +486,10 @@ struct InputBar: View {
                 }
 
             HStack(alignment: .center, spacing: 8) {
-                // Pixel pet mascot — only show when not thinking (it shows in the chat instead)
-                if case .thinking = session.assistantState {} else {
-                    PetView(session: session)
-                        .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
-                }
+                // Pixel pet mascot — fade out when thinking (it shows in the chat instead)
+                PetView(session: session)
+                    .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                    .opacity({ if case .thinking = session.assistantState { return 0.0 } else { return 1.0 } }())
 
                 // Plus button for attachments
                 Button(action: onAttach) {
@@ -512,7 +511,6 @@ struct InputBar: View {
                     .focused(inputFocused)
                     .lineLimit(1...8)
                     .onSubmit { onSend() }
-                    .layoutPriority(1)
 
                 // Right side buttons
                 HStack(spacing: 6) {
@@ -545,6 +543,7 @@ struct InputBar: View {
                     .help(isReady ? "Send (Enter)" : "Queue (Enter)")
                 }
                 .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
             }
             }
             .padding(.horizontal, 12)

@@ -4,6 +4,17 @@ import UserNotifications
 class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionManager: SessionManager?
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Strip tiling state from saved window frame to prevent macOS
+        // from stretching the window on restore
+        let key = "NSWindow Frame main"
+        if let saved = UserDefaults.standard.string(forKey: key),
+           let braceRange = saved.range(of: " {") {
+            let cleaned = String(saved[saved.startIndex..<braceRange.lowerBound])
+            UserDefaults.standard.set(cleaned, forKey: key)
+        }
+    }
+
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
         let newSession = NSMenuItem(title: "New Session", action: #selector(newSession), keyEquivalent: "")
@@ -42,6 +53,7 @@ struct ClaudeStationApp: App {
                     handleURL(url)
                 }
         }
+        .defaultSize(width: 600, height: 600)
         .commands {
             // Replace default "New Window" (Cmd+N) with our "New Session"
             CommandGroup(replacing: .newItem) {
