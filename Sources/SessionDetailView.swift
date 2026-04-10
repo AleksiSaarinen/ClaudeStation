@@ -24,7 +24,9 @@ struct SessionDetailView: View {
             if activeTab == .minigame {
                 MinigameView(bridge: minigameBridge)
             } else {
-            ChatView(session: session)
+            ChatView(session: session, onSuggestionTap: { text in
+                    sessionManager.sendImmediately(text, to: session)
+                })
                 .contentShape(Rectangle())
                 .onTapGesture { inputFocused = true }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -449,6 +451,8 @@ struct InputBar: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(theme.toolCardBorder, lineWidth: 1)
                                     )
+                                    .onTapGesture { showImagePreview = true }
+                                    .cursor(.pointingHand)
                             }
                         }
                         Button(action: onRemoveAttachment) {
@@ -472,6 +476,8 @@ struct InputBar: View {
                                     RoundedRectangle(cornerRadius: 8)
                                         .stroke(theme.toolCardBorder, lineWidth: 1)
                                 )
+                                .onTapGesture { showImagePreview = true }
+                                .cursor(.pointingHand)
                             Button(action: onRemoveAttachment) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 14))
@@ -504,13 +510,28 @@ struct InputBar: View {
                 .help("Attach file")
 
                 // Text field — grows up to 8 lines, scrolls internally beyond that
-                TextField("Message to Claude...", text: $inputText, axis: .vertical)
+                let ghostLabel = session.suggestedActions.first?.label ?? "Message to Claude..."
+                TextField(ghostLabel, text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(theme.monoFont)
                     .foregroundStyle(theme.assistantText)
                     .focused(inputFocused)
                     .lineLimit(1...8)
-                    .onSubmit { onSend() }
+                    .onSubmit {
+                        // If input is empty and we have a suggestion, send it directly
+                        if inputText.isEmpty, let first = session.suggestedActions.first {
+                            inputText = first.prompt
+                        }
+                        onSend()
+                    }
+                    .onKeyPress(.tab) {
+                        // Tab autofills the suggestion prompt for editing
+                        if inputText.isEmpty, let first = session.suggestedActions.first {
+                            inputText = first.prompt
+                            return .handled
+                        }
+                        return .ignored
+                    }
 
                 // Right side buttons
                 HStack(spacing: 6) {

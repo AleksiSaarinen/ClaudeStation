@@ -96,6 +96,7 @@ class TerminalService {
             session.chatMessages.append(userMsg)
             session.status = .running
             session.assistantState = .thinking("Thinking...")
+            session.suggestedActions = []
         }
 
         let startTime = Date()
@@ -448,24 +449,117 @@ class TerminalService {
             session.status = .waitingForInput
             session.assistantState = .idle
 
+            // Generate smart suggestions for next action
+            self.generateSuggestions(for: session)
+
             // Trigger save after response completes
             NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
 
             // System notification if app is not focused
             if !NSApp.isActive {
-                let content = UNMutableNotificationContent()
-                content.title = "Claude finished"
-                let preview = session.chatMessages.last?.content.prefix(80) ?? ""
-                content.body = String(preview)
-                content.sound = .default
-                let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-                UNUserNotificationCenter.current().add(request)
+                let center = UNUserNotificationCenter.current()
+                center.getNotificationSettings { settings in
+                    switch settings.authorizationStatus {
+                    case .notDetermined:
+                        // First time — request permission, then send
+                        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                            if granted { self.sendNotification(session: session) }
+                        }
+                    case .authorized, .provisional:
+                        self.sendNotification(session: session)
+                    default:
+                        break
+                    }
+                }
             }
 
             if !session.messageQueue.isEmpty {
                 self.processNextInQueue(for: session)
             }
         }
+    }
+
+    // MARK: - Smart Suggestions
+
+    func generateSuggestions(for session: Session) {
+        // Collect context from last exchange
+        let lastMessages = session.chatMessages.suffix(4)
+        var context = ""
+        for msg in lastMessages {
+            let role = msg.role == .user ? "User" : "Assistant"
+            // Include tool names used
+            let tools = msg.blocks.compactMap { block -> String? in
+                if case .toolUse(let name, _) = block.kind { return name }
+                return nil
+            }
+            let toolStr = tools.isEmpty ? "" : " [Tools: \(tools.joined(separator: ", "))]"
+            // Truncate content to keep prompt small
+            let content = String(msg.content.prefix(300))
+            context += "\(role)\(toolStr): \(content)\n\n"
+        }
+
+        let prompt = """
+        Based on this Claude Code conversation, suggest 2-3 short follow-up actions the user might want to do next. Return ONLY a JSON array, no markdown, no explanation. Each item has "icon" (SF Symbol name), "label" (2-4 words), and "prompt" (the actual message to send to Claude).
+
+        Conversation:
+        \(context)
+
+        Rules:
+        - Be specific to what just happened, not generic
+        - Use SF Symbol names like: checkmark.circle, arrow.triangle.branch, play.fill, hammer, arrow.counterclockwise, doc.text, ant, terminal, testtube.2, paperplane
+        - Keep labels short (2-4 words max)
+        - Keep prompts concise but actionable
+        - If code was edited, suggest testing or committing
+        - If tests passed, suggest committing
+        - If there was an error, suggest fixing
+        - Return valid JSON array only
+        """
+
+        let claudePath = resolvedClaudePath
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-l", "-c", "\(claudePath) -p --model haiku --output-format text '\(prompt.replacingOccurrences(of: "'", with: "'\\''"))'"]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            process.environment = ProcessInfo.processInfo.environment
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+
+                // Extract JSON array from response (handle potential markdown wrapping)
+                var jsonStr = text
+                if let start = jsonStr.range(of: "["), let end = jsonStr.range(of: "]", options: .backwards) {
+                    jsonStr = String(jsonStr[start.lowerBound...end.upperBound])
+                }
+
+                guard let jsonData = jsonStr.data(using: .utf8),
+                      let arr = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: String]] else { return }
+
+                let suggestions = arr.prefix(3).compactMap { item -> (icon: String, label: String, prompt: String)? in
+                    guard let icon = item["icon"], let label = item["label"], let prompt = item["prompt"] else { return nil }
+                    return (icon: icon, label: label, prompt: prompt)
+                }
+
+                DispatchQueue.main.async {
+                    session.suggestedActions = suggestions
+                }
+            } catch {}
+        }
+    }
+
+    private func sendNotification(session: Session) {
+        let content = UNMutableNotificationContent()
+        content.title = "\(session.displayName) — Claude finished"
+        let preview = session.chatMessages.last?.content.prefix(100) ?? ""
+        content.body = String(preview)
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Queue Processing

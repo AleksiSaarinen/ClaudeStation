@@ -38,6 +38,11 @@ class SessionManager: ObservableObject {
             }
         }
 
+        // Generate suggestions for any restored session that has chat history
+        for session in sessions where session.status == .waitingForInput && !session.chatMessages.isEmpty {
+            TerminalService.shared.generateSuggestions(for: session)
+        }
+
         // Listen for save triggers from TerminalService
         saveObserver = NotificationCenter.default.addObserver(
             forName: .init("ClaudeStationSave"), object: nil, queue: .main

@@ -33,9 +33,7 @@ struct ClaudeStationApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var sessionManager = SessionManager()
 
-    init() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
+    init() {}
     @AppStorage("selectedTheme") private var selectedThemeId = "midnight"
     @AppStorage("customMonoFont") private var customMonoFont = ""
 

@@ -133,7 +133,7 @@ struct PetView: View {
                 // Already playing success, let it finish
                 return
             } else {
-                newState = Date().timeIntervalSince(idleSince) > 120 ? .sleepy : .idle
+                newState = .idle
             }
 
         case .error: newState = .error
@@ -172,13 +172,6 @@ struct PetView: View {
                 }
             }
 
-            // Sleepy check
-            if currentState == .idle && session.status == .waitingForInput &&
-               Date().timeIntervalSince(idleSince) > 120 {
-                currentState = .sleepy
-                currentFrame = 0
-                startAnimation()
-            }
         }
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChatView: View {
     @ObservedObject var session: Session
+    var onSuggestionTap: ((String) -> Void)? = nil
     @Environment(\.theme) var theme
     @State private var lastScrollTime: Date = .distantPast
     @State private var chatScrollView: NSScrollView?
@@ -77,6 +78,16 @@ struct ChatView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
                 }
 
+                // Suggested actions after Claude finishes
+                if session.status == .waitingForInput
+                    && session.chatMessages.last?.role == .assistant
+                    && !session.planMode {
+                    SuggestedActions(session: session, onTap: { text in
+                        onSuggestionTap?(text)
+                    })
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
                 // Execute Plan button — only shows when Claude finished a plan
                 // (contains ExitPlanMode or a plan file write, not permission requests)
                 if session.planMode
@@ -92,6 +103,7 @@ struct ChatView: View {
             .padding(.bottom, 8)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: session.chatMessages.count)
             .animation(.easeInOut(duration: 0.25), value: session.assistantState)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: session.suggestedActions.count)
         }
         .scrollContentBackground(.hidden)
         .background(Color.clear)
@@ -104,6 +116,9 @@ struct ChatView: View {
         }
         .onChange(of: lastMessageContent) { _, _ in
             if !userScrolledUp { scrollToBottom() }
+        }
+        .onChange(of: session.suggestedActions.count) { _, _ in
+            if !userScrolledUp { smoothScrollToBottom() }
         }
         .onChange(of: lastMessageBlockCount) { _, _ in
             if !userScrolledUp { scrollToBottom() }
@@ -204,6 +219,27 @@ struct ChatView: View {
             DispatchQueue.main.async {
                 isProgrammaticScroll = false
             }
+        }
+    }
+
+    private func smoothScrollToBottom() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard let scrollView = chatScrollView,
+                  let docView = scrollView.documentView else { return }
+            let visibleHeight = scrollView.contentView.bounds.height
+            let docHeight = docView.bounds.height
+            guard docHeight > visibleHeight else { return }
+            let inputBarOffset: CGFloat = 56
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
+            isProgrammaticScroll = true
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.4
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                scrollView.contentView.animator().setBoundsOrigin(target)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }, completionHandler: {
+                isProgrammaticScroll = false
+            })
         }
     }
 }
@@ -984,5 +1020,50 @@ struct ThinkingPetIndicator: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .modifier(LiquidGlassChrome(cornerRadius: 12))
+    }
+}
+
+// MARK: - Suggested Actions
+
+struct SuggestedActions: View {
+    @ObservedObject var session: Session
+    var onTap: (String) -> Void
+    @Environment(\.theme) var theme
+    @State private var visibleCount = 0
+
+    var body: some View {
+        if !session.suggestedActions.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(Array(session.suggestedActions.enumerated()), id: \.element.label) { index, suggestion in
+                    Button {
+                        onTap(suggestion.prompt)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: suggestion.icon)
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(suggestion.label)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(theme.chromeText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .modifier(LiquidGlassChrome(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .cursor(.pointingHand)
+                    .opacity(index < visibleCount ? 1 : 0)
+                    .offset(y: index < visibleCount ? 0 : 8)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(Double(index) * 0.1), value: visibleCount)
+                }
+                Spacer()
+            }
+            .onAppear { visibleCount = session.suggestedActions.count }
+            .onChange(of: session.suggestedActions.count) { _, new in
+                visibleCount = 0
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    visibleCount = new
+                }
+            }
+        }
     }
 }

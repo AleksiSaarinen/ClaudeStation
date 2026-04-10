@@ -40,6 +40,7 @@ class Session: ObservableObject, Identifiable {
     @Published var planMode: Bool = false
     @Published var lastToolName: String?
     @Published var lastToolCommand: String?
+    @Published var suggestedActions: [(icon: String, label: String, prompt: String)] = []
 
     /// Claude Code session ID for --resume multi-turn
     var claudeSessionId: String?
