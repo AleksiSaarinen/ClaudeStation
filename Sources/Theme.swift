@@ -177,12 +177,12 @@ struct AnimatedGradientBackground: View {
                 }
 
                 // Particles
-                let accentColor = activityColor
+                let bgBrightness = NSColor(base).brightnessComponent
+                let isBubbleMode = bgBrightness > 0.35
+                let accentColor = isBubbleMode ? NSColor(Color(hex: "#B3E5FC")) : activityColor
                 for i in particles.indices {
                     let p = particles[i]
                     let elapsed = t * p.phaseSpeed
-                    // Position wraps 0…1 using modulo
-                    // Active: fast straight rise with tiny horizontal jitter. Idle: gentle drift.
                     let wobbleX = isRunning ? sin(elapsed * 2 + p.phase) * 0.008 : sin(elapsed + p.phase) * 0.02
                     var wx = (p.x + p.speedX * t * (isRunning ? 0.3 : speedMult) + wobbleX)
                         .truncatingRemainder(dividingBy: 1.0)
@@ -191,12 +191,10 @@ struct AnimatedGradientBackground: View {
                     if wx < 0 { wx += 1.0 }
                     if wy < 0 { wy += 1.0 }
 
-                    // Fade near edges
                     let edgeFade = min(
                         min(wx, 1.0 - wx) * 8,
                         min(wy, 1.0 - wy) * 8
                     ).clamped(to: 0...1)
-                    // Twinkle — carbonated fizz when running, gentle pulse when idle
                     let twinkleSpeed = isRunning ? p.phaseSpeed * 6 : p.phaseSpeed * 2
                     let twinkle = isRunning ? 0.6 + 0.4 * sin(t * twinkleSpeed + p.phase) : 0.4 + 0.6 * sin(t * twinkleSpeed + p.phase)
                     let sizeScale = isRunning ? 1.0 + 0.3 * sin(t * p.phaseSpeed * 3 + p.phase) : 1.0
@@ -204,29 +202,55 @@ struct AnimatedGradientBackground: View {
 
                     let screenX = wx * size.width
                     let screenY = wy * size.height
-                    let r = p.size * sizeScale
 
-                    // Glow — bigger and brighter when active
-                    let glowMult = isRunning ? 3.0 : 2.0
-                    let glowAlpha = isRunning ? alpha * 0.7 : alpha * 0.5
-                    context.fill(
-                        Path(ellipseIn: CGRect(x: screenX - r * glowMult, y: screenY - r * glowMult, width: r * glowMult * 2, height: r * glowMult * 2)),
-                        with: .radialGradient(
-                            Gradient(colors: [
-                                Color(nsColor: accentColor.withAlphaComponent(glowAlpha)),
-                                .clear
-                            ]),
-                            center: CGPoint(x: screenX, y: screenY),
-                            startRadius: 0,
-                            endRadius: r * glowMult
+                    if isBubbleMode {
+                        // Bubble particles
+                        let r = (p.size * sizeScale) * 2.5
+                        let rect = CGRect(x: screenX - r, y: screenY - r, width: r * 2, height: r * 2)
+
+                        // Bubble fill — very subtle transparent
+                        context.fill(
+                            Path(ellipseIn: rect),
+                            with: .color(Color.white.opacity(alpha * 0.08))
                         )
-                    )
 
-                    // Core dot
-                    context.fill(
-                        Path(ellipseIn: CGRect(x: screenX - r/2, y: screenY - r/2, width: r, height: r)),
-                        with: .color(Color(nsColor: accentColor.withAlphaComponent(alpha * 0.8)))
-                    )
+                        // Bubble ring
+                        context.stroke(
+                            Path(ellipseIn: rect),
+                            with: .color(Color.white.opacity(alpha * 0.35)),
+                            lineWidth: 0.6
+                        )
+
+                        // Highlight — small bright spot upper-left
+                        let hlSize = r * 0.35
+                        let hlX = screenX - r * 0.35
+                        let hlY = screenY - r * 0.35
+                        context.fill(
+                            Path(ellipseIn: CGRect(x: hlX - hlSize/2, y: hlY - hlSize/2, width: hlSize, height: hlSize)),
+                            with: .color(Color.white.opacity(alpha * 0.5))
+                        )
+                    } else {
+                        // Standard glow particles
+                        let r = p.size * sizeScale
+                        let glowMult = isRunning ? 3.0 : 2.0
+                        let glowAlpha = isRunning ? alpha * 0.7 : alpha * 0.5
+                        context.fill(
+                            Path(ellipseIn: CGRect(x: screenX - r * glowMult, y: screenY - r * glowMult, width: r * glowMult * 2, height: r * glowMult * 2)),
+                            with: .radialGradient(
+                                Gradient(colors: [
+                                    Color(nsColor: accentColor.withAlphaComponent(glowAlpha)),
+                                    .clear
+                                ]),
+                                center: CGPoint(x: screenX, y: screenY),
+                                startRadius: 0,
+                                endRadius: r * glowMult
+                            )
+                        )
+                        context.fill(
+                            Path(ellipseIn: CGRect(x: screenX - r/2, y: screenY - r/2, width: r, height: r)),
+                            with: .color(Color(nsColor: accentColor.withAlphaComponent(alpha * 0.8)))
+                        )
+                    }
                 }
             }
         }
@@ -440,7 +464,22 @@ extension Theme {
         fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 8
     )
 
-    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon, melon, sorbet]
+    static let aero = Theme(
+        id: "aero", name: "Frutiger Aero",
+        chatBg: Color(hex: "#3BA8E0"), chatBgGradientEnd: Color(hex: "#5EC45E"),
+        userBubble: Color(hex: "#E8F4FD"), userBubbleText: Color(hex: "#1A3A5C"),
+        assistantBubble: Color.white.opacity(0.15), assistantBubbleBorder: Color(hex: "#90CAF9"), assistantText: .white,
+        toolCardBg: Color.white.opacity(0.15), toolCardBorder: Color.white.opacity(0.3), toolCardText: .white,
+        accent: Color(hex: "#1565C0"),
+        chromeBar: Color(hex: "#1976D2"), chromeBorder: Color(hex: "#42A5F5"), chromeText: .white,
+        inputBg: Color.white.opacity(0.15), inputBorder: Color.white.opacity(0.3),
+        mutedText: Color(hex: "#B3D9F2"), successDot: Color(hex: "#66BB6A"),
+        costText: Color(hex: "#80DEEA"), timestampText: Color(hex: "#90CAF9"),
+        promptChar: ">", promptColor: Color(hex: "#4CAF50"),
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
+    )
+
+    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon, melon, sorbet, aero]
 
     static func byId(_ id: String) -> Theme {
         all.first { $0.id == id } ?? midnight

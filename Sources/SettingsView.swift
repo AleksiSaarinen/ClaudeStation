@@ -30,6 +30,7 @@ struct SettingsView: View {
 struct ThemeSettingsTab: View {
     @AppStorage("selectedTheme") private var selectedThemeId = "midnight"
     @AppStorage("customMonoFont") private var customMonoFont = ""
+    @AppStorage("selectedCursorPack") private var selectedCursorPack = "system"
     @Environment(\.theme) var theme
 
     let columns = [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 12)]
@@ -55,6 +56,49 @@ struct ThemeSettingsTab: View {
                                         .font(.custom(font, size: 13))
                                         .frame(height: 18)
                                     Text(font)
+                                        .font(.caption2)
+                                        .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                                .background(active ? theme.accent.opacity(0.15) : Color.primary.opacity(0.03))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(active ? theme.accent : Color.primary.opacity(0.1), lineWidth: active ? 2 : 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Divider()
+
+                // Cursor picker
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Cursor")
+                        .font(.headline)
+                    let cursorCols = [GridItem(.adaptive(minimum: 105, maximum: 140), spacing: 8)]
+                    LazyVGrid(columns: cursorCols, spacing: 8) {
+                        ForEach(CursorPack.all) { pack in
+                            let active = selectedCursorPack == pack.id
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    selectedCursorPack = pack.id
+                                    CursorManager.applyPack(pack.id)
+                                }
+                            } label: {
+                                VStack(spacing: 3) {
+                                    if pack.id == "system" {
+                                        Image(systemName: "cursorarrow")
+                                            .font(.system(size: 16))
+                                            .frame(height: 22)
+                                    } else {
+                                        CursorPreview(packId: pack.id)
+                                            .frame(height: 22)
+                                    }
+                                    Text(pack.name)
                                         .font(.caption2)
                                         .lineLimit(1)
                                 }
@@ -246,6 +290,25 @@ struct ProfilesSettingsTab: View {
                 Spacer()
             }
             .padding(12)
+        }
+    }
+}
+
+struct CursorPreview: View {
+    let packId: String
+
+    var body: some View {
+        let resourcePath = Bundle.main.resourcePath ?? ""
+        let path = "\(resourcePath)/Cursors/\(packId)/arrow.png"
+        if let img = NSImage(contentsOfFile: path) {
+            Image(nsImage: img)
+                .interpolation(.none)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 22, height: 22)
+        } else {
+            Image(systemName: "cursorarrow")
+                .font(.system(size: 16))
         }
     }
 }

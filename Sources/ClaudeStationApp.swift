@@ -13,6 +13,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let cleaned = String(saved[saved.startIndex..<braceRange.lowerBound])
             UserDefaults.standard.set(cleaned, forKey: key)
         }
+
+        // Apply selected cursor pack
+        let cursorPack = UserDefaults.standard.string(forKey: "selectedCursorPack") ?? "system"
+        CursorManager.applyPack(cursorPack)
     }
 
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {

@@ -1047,6 +1047,7 @@ struct SuggestedActions: View {
                         .foregroundStyle(theme.chromeText)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
+                        .contentShape(Rectangle())
                         .modifier(LiquidGlassChrome(cornerRadius: 12))
                     }
                     .buttonStyle(.plain)

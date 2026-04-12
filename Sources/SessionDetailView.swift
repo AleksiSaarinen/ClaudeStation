@@ -25,7 +25,7 @@ struct SessionDetailView: View {
                 MinigameView(bridge: minigameBridge)
             } else {
             ChatView(session: session, onSuggestionTap: { text in
-                    sessionManager.sendImmediately(text, to: session)
+                    inputText = text
                 })
                 .contentShape(Rectangle())
                 .onTapGesture { inputFocused = true }
@@ -410,7 +410,8 @@ struct AttachmentPreview: View {
 extension View {
     func cursor(_ cursor: NSCursor) -> some View {
         onHover { inside in
-            if inside { cursor.push() } else { NSCursor.pop() }
+            // Re-resolve dynamically so cursor pack changes take effect
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 }
@@ -532,6 +533,20 @@ struct InputBar: View {
                         }
                         return .ignored
                     }
+                    .overlay(alignment: .bottomTrailing) {
+                        if !inputText.isEmpty {
+                            Button {
+                                inputText = ""
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(theme.chromeText.opacity(0.4))
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: 2, y: 2)
+                            .transition(.scale(scale: 0.5).combined(with: .opacity))
+                        }
+                    }
 
                 // Right side buttons
                 HStack(spacing: 6) {
@@ -541,7 +556,7 @@ struct InputBar: View {
                     } label: {
                         Text("Plan")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(session.planMode ? theme.assistantBubble : theme.chromeText)
+                            .foregroundStyle(session.planMode ? .white : theme.chromeText)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
                             .background(session.planMode ? theme.accent : theme.chromeText.opacity(0.25))
@@ -554,7 +569,7 @@ struct InputBar: View {
                     Button(action: onSend) {
                         Image(systemName: isReady ? "arrow.up" : "tray.and.arrow.down")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.chromeText : theme.assistantBubble)
+                            .foregroundStyle(inputText.isEmpty && !hasAttachment ? theme.chromeText : .white)
                             .frame(width: 28, height: 28)
                             .background(inputText.isEmpty && !hasAttachment ? theme.chromeText.opacity(0.25) : theme.accent)
                             .clipShape(Circle())

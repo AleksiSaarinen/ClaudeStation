@@ -66,6 +66,11 @@ fi
 mkdir -p "$APP/Contents/Resources/PetFrames"
 cp Resources/ClaudeStation.icns "$APP/Contents/Resources/" 2>/dev/null
 cp Resources/PetFrames/*.png "$APP/Contents/Resources/PetFrames/" 2>/dev/null
+for pack in Resources/Cursors/*/; do
+    packName=$(basename "$pack")
+    mkdir -p "$APP/Contents/Resources/Cursors/$packName"
+    cp "$pack"*.png "$APP/Contents/Resources/Cursors/$packName/" 2>/dev/null
+done
 
 echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1

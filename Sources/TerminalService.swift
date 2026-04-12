@@ -482,37 +482,63 @@ class TerminalService {
     // MARK: - Smart Suggestions
 
     func generateSuggestions(for session: Session) {
-        // Collect context from last exchange
-        let lastMessages = session.chatMessages.suffix(4)
+        // Collect context from last exchange — include tool details
+        // Only use the last assistant message + the user message before it
+        let lastMessages = session.chatMessages.suffix(2)
         var context = ""
         for msg in lastMessages {
             let role = msg.role == .user ? "User" : "Assistant"
-            // Include tool names used
-            let tools = msg.blocks.compactMap { block -> String? in
-                if case .toolUse(let name, _) = block.kind { return name }
-                return nil
+            var toolDetails: [String] = []
+            for block in msg.blocks {
+                switch block.kind {
+                case .toolUse(let name, let inputJson):
+                    if let data = inputJson.data(using: .utf8),
+                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        let summary: String
+                        switch name {
+                        case "Bash": summary = "Ran: \(dict["command"] as? String ?? "")"
+                        case "Edit", "Write": summary = "Edited: \(dict["file_path"] as? String ?? "")"
+                        case "Read": summary = "Read: \(dict["file_path"] as? String ?? "")"
+                        case "Grep", "Glob": summary = "Searched: \(dict["pattern"] as? String ?? "")"
+                        default: summary = "Used: \(name)"
+                        }
+                        toolDetails.append(String(summary.prefix(200)))
+                    } else {
+                        toolDetails.append("Used: \(name)")
+                    }
+                default: break
+                }
             }
-            let toolStr = tools.isEmpty ? "" : " [Tools: \(tools.joined(separator: ", "))]"
-            // Truncate content to keep prompt small
-            let content = String(msg.content.prefix(300))
-            context += "\(role)\(toolStr): \(content)\n\n"
+            let toolStr = toolDetails.isEmpty ? "" : "\n  Actions taken:\n  - \(toolDetails.joined(separator: "\n  - "))"
+            let content = String(msg.content.prefix(600))
+            context += "\(role): \(content)\(toolStr)\n\n"
         }
 
+        // Detect what's already done from the content
+        let lastContent = (session.chatMessages.last?.content ?? "").lowercased()
+        var doneActions: [String] = []
+        if lastContent.contains("pushed") || lastContent.contains("git push") { doneActions.append("push is DONE") }
+        if lastContent.contains("committed") || lastContent.contains("git commit") { doneActions.append("commit is DONE") }
+        if lastContent.contains("deployed") || lastContent.contains("deploy") { doneActions.append("deploy is DONE") }
+        if lastContent.contains("merged") { doneActions.append("merge is DONE") }
+        let doneStr = doneActions.isEmpty ? "" : "\n\nALREADY DONE: \(doneActions.joined(separator: ", ")). Do NOT suggest these."
+
         let prompt = """
-        Based on this Claude Code conversation, suggest 2-3 short follow-up actions the user might want to do next. Return ONLY a JSON array, no markdown, no explanation. Each item has "icon" (SF Symbol name), "label" (2-4 words), and "prompt" (the actual message to send to Claude).
+        Suggest 2-3 things the user should do NEXT in this Claude Code session. Return ONLY a valid JSON array.
+
+        Format: [{"icon": "SF Symbol name", "label": "2-4 words", "prompt": "message to send to Claude Code"}]\(doneStr)
+
+        RULES:
+        - NEVER suggest something already done (check the actions and response text carefully)
+        - Suggest things Claude Code CAN do: run commands, edit/read files, search code, run tests, analyze logs
+        - Claude Code CANNOT: open apps, click UI, visually test, browse websites
+        - After a completed task (pushed/deployed/done): suggest what to work on NEXT or ask "what should we work on next?"
+        - Keep prompts under 50 chars, specific and actionable
+
+        SF Symbols: checkmark.circle, arrow.triangle.branch, play.fill, hammer, arrow.counterclockwise, doc.text, terminal, testtube.2, paperplane, eye, bolt, server.rack, globe, magnifyingglass, questionmark.circle, list.bullet
 
         Conversation:
         \(context)
-
-        Rules:
-        - Be specific to what just happened, not generic
-        - Use SF Symbol names like: checkmark.circle, arrow.triangle.branch, play.fill, hammer, arrow.counterclockwise, doc.text, ant, terminal, testtube.2, paperplane
-        - Keep labels short (2-4 words max)
-        - Keep prompts concise but actionable
-        - If code was edited, suggest testing or committing
-        - If tests passed, suggest committing
-        - If there was an error, suggest fixing
-        - Return valid JSON array only
         """
 
         let claudePath = resolvedClaudePath
@@ -520,7 +546,7 @@ class TerminalService {
             let process = Process()
             let pipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-l", "-c", "\(claudePath) -p --model haiku --output-format text '\(prompt.replacingOccurrences(of: "'", with: "'\\''"))'"]
+            process.arguments = ["-l", "-c", "\(claudePath) -p --model sonnet --output-format text '\(prompt.replacingOccurrences(of: "'", with: "'\\''"))'"]
             process.standardOutput = pipe
             process.standardError = FileHandle.nullDevice
             process.environment = ProcessInfo.processInfo.environment
@@ -534,7 +560,7 @@ class TerminalService {
                 // Extract JSON array from response (handle potential markdown wrapping)
                 var jsonStr = text
                 if let start = jsonStr.range(of: "["), let end = jsonStr.range(of: "]", options: .backwards) {
-                    jsonStr = String(jsonStr[start.lowerBound...end.upperBound])
+                    jsonStr = String(jsonStr[start.lowerBound..<end.upperBound])
                 }
 
                 guard let jsonData = jsonStr.data(using: .utf8),
@@ -555,8 +581,19 @@ class TerminalService {
     private func sendNotification(session: Session) {
         let content = UNMutableNotificationContent()
         content.title = "\(session.displayName) — Claude finished"
-        let preview = session.chatMessages.last?.content.prefix(100) ?? ""
-        content.body = String(preview)
+        // Get the last text block from the message (skips tool use blocks)
+        let lastTextBlock = session.chatMessages.last?.blocks.last(where: {
+            if case .text = $0.kind { return true }
+            return false
+        })
+        let text: String
+        if case .text(let t) = lastTextBlock?.kind {
+            text = t
+        } else {
+            text = session.chatMessages.last?.content ?? ""
+        }
+        // Take first 150 chars of the final text block
+        content.body = String(text.prefix(150))
         content.sound = .default
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
