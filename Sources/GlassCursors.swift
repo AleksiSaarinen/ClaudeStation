@@ -58,7 +58,12 @@ struct CursorPack: Identifiable, Equatable {
         size: 32, arrowHotspot: NSPoint(x: 4, y: 2), pointerHotspot: NSPoint(x: 8, y: 2), textHotspot: NSPoint(x: 16, y: 16)
     )
 
-    static let all: [CursorPack] = [system, mickey, wii, blueGlass, aeroNoTail, bibataClassic, bibataIce, bibataAmber, kenney, win11Light, win11Dark]
+    static let stainedGlass = CursorPack(
+        id: "StainedGlass", name: "Stained Glass",
+        size: 32, arrowHotspot: NSPoint(x: 4, y: 2), pointerHotspot: NSPoint(x: 8, y: 2), textHotspot: NSPoint(x: 16, y: 16)
+    )
+
+    static let all: [CursorPack] = [system, mickey, wii, blueGlass, stainedGlass, aeroNoTail, bibataClassic, bibataIce, bibataAmber, kenney, win11Light, win11Dark]
 }
 
 /// Custom cursor management
@@ -100,6 +105,7 @@ enum CursorManager {
         customArrow = loadCursor(pack: pack, name: "arrow", hotSpot: pack.arrowHotspot)
         customPointer = loadCursor(pack: pack, name: "pointer", hotSpot: pack.pointerHotspot)
         customIBeam = loadCursor(pack: pack, name: "text", hotSpot: pack.textHotspot)
+        loadWaitFrames(packId: pack.id)
 
         if !isSwizzled { swizzle(); isSwizzled = true }
 
@@ -122,9 +128,51 @@ enum CursorManager {
     }
 
     // Accessors for the override class
-    static var arrow: NSCursor { customArrow ?? NSCursor.arrow }
+    static var arrow: NSCursor { animating ? (waitFrameCursors.isEmpty ? customArrow ?? NSCursor.arrow : waitFrameCursors[waitFrameIndex % waitFrameCursors.count]) : customArrow ?? NSCursor.arrow }
     static var pointer: NSCursor { customPointer ?? NSCursor.pointingHand }
     static var iBeam: NSCursor { customIBeam ?? NSCursor.iBeam }
+
+    // MARK: - Animated Wait Cursor
+
+    private static var waitFrameCursors: [NSCursor] = []
+    private static var waitFrameIndex = 0
+    private static var animationTimer: Timer?
+    private static var animating = false
+
+    private static func loadWaitFrames(packId: String) {
+        let resourcePath = Bundle.main.resourcePath ?? ""
+        let waitDir = "\(resourcePath)/Cursors/\(packId)/wait"
+        var frames: [NSCursor] = []
+        var i = 1
+        while true {
+            let path = "\(waitDir)/\(String(format: "%02d", i)).png"
+            guard let image = NSImage(contentsOfFile: path) else { break }
+            image.size = NSSize(width: 32, height: 32)
+            frames.append(NSCursor(image: image, hotSpot: NSPoint(x: 16, y: 16)))
+            i += 1
+        }
+        waitFrameCursors = frames
+    }
+
+    static func startAnimating() {
+        guard !waitFrameCursors.isEmpty, !animating else { return }
+        animating = true
+        waitFrameIndex = 0
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { _ in
+            waitFrameIndex = (waitFrameIndex + 1) % waitFrameCursors.count
+            if NSApp.isActive {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+
+    static func stopAnimating() {
+        guard animating else { return }
+        animating = false
+        animationTimer?.invalidate()
+        animationTimer = nil
+        if isSwizzled { NSCursor.arrow.set() }
+    }
 }
 
 class CursorOverrides: NSObject {

@@ -97,6 +97,7 @@ Each response comes as clean JSON events:
 | Wii | [rw-designer.com/cursor-set/wii-cursor-by-stefano-tinaglia](https://www.rw-designer.com/cursor-set/wii-cursor-by-stefano-tinaglia) | Free |
 | Blue Glass | [rw-designer.com/cursor-set/clear-blueglass](https://www.rw-designer.com/cursor-set/clear-blueglass) | Free |
 | Aero No Tail | [rw-designer.com/cursor-set/aero-no-tail](https://www.rw-designer.com/cursor-set/aero-no-tail) | Free |
+| Stained Glass | [rw-designer.com/cursor-set/stained-glass](https://www.rw-designer.com/cursor-set/stained-glass) | CC BY |
 | Win11 Light/Dark | [jepricreations on DeviantArt](https://www.deviantart.com/jepricreations/art/Windows-11-Cursors-Concept-1125712444) | Free |
 
 ## License

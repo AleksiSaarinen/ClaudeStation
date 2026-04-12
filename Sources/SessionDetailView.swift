@@ -192,11 +192,15 @@ struct SessionDetailView: View {
             if oldStatus == .waitingForInput && newStatus == .running {
                 taskStartTime = Date()
                 minigameBridge.taskStarted()
+                if UserDefaults.standard.bool(forKey: "cursorAnimations") {
+                    CursorManager.startAnimating()
+                }
             }
             if oldStatus == .running && newStatus == .waitingForInput {
                 let duration = taskStartTime.map { Date().timeIntervalSince($0) } ?? 30
                 minigameBridge.taskCompleted(durationSeconds: Int(duration))
                 taskStartTime = nil
+                CursorManager.stopAnimating()
             }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
@@ -586,6 +590,7 @@ struct InputBar: View {
             .padding(.vertical, 6)
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .modifier(LiquidGlassChrome(cornerRadius: 20))
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: inputText.count)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)

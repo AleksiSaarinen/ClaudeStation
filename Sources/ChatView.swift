@@ -75,7 +75,7 @@ struct ChatView: View {
                 if case .thinking(let text) = session.assistantState {
                     ThinkingPetIndicator(session: session, text: text)
                         .id("thinking")
-                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+                        .transition(.opacity.combined(with: .scale(scale: 0.3, anchor: .leading)))
                 }
 
                 // Suggested actions after Claude finishes
@@ -112,7 +112,7 @@ struct ChatView: View {
             if new > old, let last = session.chatMessages.last, last.role == .user {
                 userScrolledUp = false
             }
-            if !userScrolledUp { scrollToBottom() }
+            if !userScrolledUp { bouncyScrollToBottom() }
         }
         .onChange(of: lastMessageContent) { _, _ in
             if !userScrolledUp { scrollToBottom() }
@@ -239,6 +239,38 @@ struct ChatView: View {
                 scrollView.reflectScrolledClipView(scrollView.contentView)
             }, completionHandler: {
                 isProgrammaticScroll = false
+            })
+        }
+    }
+
+    private func bouncyScrollToBottom() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard let scrollView = chatScrollView,
+                  let docView = scrollView.documentView else { return }
+            let visibleHeight = scrollView.contentView.bounds.height
+            let docHeight = docView.bounds.height
+            guard docHeight > visibleHeight else { return }
+            let inputBarOffset: CGFloat = 56
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
+            let overshoot = NSPoint(x: 0, y: target.y + 15)
+            isProgrammaticScroll = true
+
+            // Phase 1: Quick scroll to overshoot
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.25
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                scrollView.contentView.animator().setBoundsOrigin(overshoot)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }, completionHandler: {
+                // Phase 2: Spring back to target
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.3
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    scrollView.contentView.animator().setBoundsOrigin(target)
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                }, completionHandler: {
+                    isProgrammaticScroll = false
+                })
             })
         }
     }
@@ -369,11 +401,12 @@ struct UserMessageRow: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(theme.userBubble.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
-            .scaleEffect(appeared ? 1.0 : 0.92)
+            .scaleEffect(appeared ? 1.0 : 0.85, anchor: .trailing)
+            .offset(y: appeared ? 0 : 6)
             .opacity(appeared ? 1.0 : 0.0)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { appeared = true }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { appeared = true }
         }
     }
 }
@@ -495,8 +528,11 @@ struct AssistantMessageRow: View {
                 .stroke(theme.assistantBubbleBorder.opacity(0.25), lineWidth: 0.5)
         )
         .padding(.trailing, 8)
+        .scaleEffect(appeared ? 1.0 : 0.9, anchor: .leading)
+        .offset(y: appeared ? 0 : 6)
+        .opacity(appeared ? 1.0 : 0.0)
         .onAppear {
-            withAnimation { appeared = true }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.65)) { appeared = true }
         }
     }
 
@@ -798,7 +834,7 @@ struct ToolResultCard: View {
         if !content.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { expanded.toggle() }
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.65)) { expanded.toggle() }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.right").font(.caption2)
@@ -1053,8 +1089,9 @@ struct SuggestedActions: View {
                     .buttonStyle(.plain)
                     .cursor(.pointingHand)
                     .opacity(index < visibleCount ? 1 : 0)
-                    .offset(y: index < visibleCount ? 0 : 8)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.7).delay(Double(index) * 0.1), value: visibleCount)
+                    .scaleEffect(index < visibleCount ? 1.0 : 0.8)
+                    .offset(y: index < visibleCount ? 0 : 12)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.55).delay(Double(index) * 0.1), value: visibleCount)
                 }
                 Spacer()
             }

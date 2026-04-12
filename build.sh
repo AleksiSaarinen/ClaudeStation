@@ -66,10 +66,11 @@ fi
 mkdir -p "$APP/Contents/Resources/PetFrames"
 cp Resources/ClaudeStation.icns "$APP/Contents/Resources/" 2>/dev/null
 cp Resources/PetFrames/*.png "$APP/Contents/Resources/PetFrames/" 2>/dev/null
-for pack in Resources/Cursors/*/; do
-    packName=$(basename "$pack")
-    mkdir -p "$APP/Contents/Resources/Cursors/$packName"
-    cp "$pack"*.png "$APP/Contents/Resources/Cursors/$packName/" 2>/dev/null
+find Resources/Cursors -name "*.png" | while read f; do
+    rel="${f#Resources/}"
+    dir="$APP/Contents/Resources/$(dirname "$rel")"
+    mkdir -p "$dir"
+    cp "$f" "$dir/"
 done
 
 echo "Signing with '$IDENTITY'..."

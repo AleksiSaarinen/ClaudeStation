@@ -31,6 +31,7 @@ struct ThemeSettingsTab: View {
     @AppStorage("selectedTheme") private var selectedThemeId = "midnight"
     @AppStorage("customMonoFont") private var customMonoFont = ""
     @AppStorage("selectedCursorPack") private var selectedCursorPack = "system"
+    @AppStorage("cursorAnimations") private var cursorAnimations = false
     @Environment(\.theme) var theme
 
     let columns = [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 12)]
@@ -114,6 +115,9 @@ struct ThemeSettingsTab: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    Toggle("Animated cursor while Claude is working", isOn: $cursorAnimations)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Divider()
