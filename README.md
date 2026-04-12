@@ -87,6 +87,18 @@ Each response comes as clean JSON events:
 - `tool_result` — tool output
 - `result` — duration, cost
 
+## Cursor Pack Credits
+
+| Pack | Source | License |
+|------|--------|---------|
+| Bibata (Classic/Ice/Amber) | [ful1e5/Bibata_Cursor](https://github.com/ful1e5/Bibata_Cursor) | MIT |
+| Kenney Pixel | [Kenney Cursor Pack](https://kenney.nl/assets/cursor-pack) | CC0 1.0 |
+| Mickey Glove | [SweezyCursors](https://sweezy-cursors.com/) | Free |
+| Wii | [rw-designer.com/cursor-set/wii-cursor-by-stefano-tinaglia](https://www.rw-designer.com/cursor-set/wii-cursor-by-stefano-tinaglia) | Free |
+| Blue Glass | [rw-designer.com/cursor-set/clear-blueglass](https://www.rw-designer.com/cursor-set/clear-blueglass) | Free |
+| Aero No Tail | [rw-designer.com/cursor-set/aero-no-tail](https://www.rw-designer.com/cursor-set/aero-no-tail) | Free |
+| Win11 Light/Dark | [jepricreations on DeviantArt](https://www.deviantart.com/jepricreations/art/Windows-11-Cursors-Concept-1125712444) | Free |
+
 ## License
 
 MIT

@@ -53,7 +53,12 @@ struct CursorPack: Identifiable, Equatable {
         size: 32, arrowHotspot: NSPoint(x: 4, y: 2), pointerHotspot: NSPoint(x: 8, y: 2), textHotspot: NSPoint(x: 16, y: 16)
     )
 
-    static let all: [CursorPack] = [system, mickey, wii, blueGlass, bibataClassic, bibataIce, bibataAmber, kenney, win11Light, win11Dark]
+    static let aeroNoTail = CursorPack(
+        id: "Aero-NoTail", name: "Aero No Tail",
+        size: 32, arrowHotspot: NSPoint(x: 4, y: 2), pointerHotspot: NSPoint(x: 8, y: 2), textHotspot: NSPoint(x: 16, y: 16)
+    )
+
+    static let all: [CursorPack] = [system, mickey, wii, blueGlass, aeroNoTail, bibataClassic, bibataIce, bibataAmber, kenney, win11Light, win11Dark]
 }
 
 /// Custom cursor management
