@@ -11,13 +11,17 @@ A native macOS app for managing Claude Code sessions with a chat UI, message que
 - **Message Queue** — Type messages while Claude is working; they auto-send when ready
 - **Multi-Session Tabs** — Chrome-style tab bar, Cmd+T for new sessions, double-click to rename
 - **Command Palette** — Cmd+K to search actions, switch sessions, change directory
-- **8 Themes** — Midnight, Aurora, Rosé, Paper, Phosphor, Deep Sea, Amber, Sakura
+- **13 Themes** — Midnight, Aurora, Rosé, Paper, Phosphor, Deep Sea, Amber, Sakura, Violet, Neon, Melon, Sorbet, Frutiger Aero
+- **Cursor Packs** — 10 custom cursor packs: System, Mickey Glove, Wii, Blue Glass, Bibata (Classic/Ice/Amber), Kenney Pixel, Win11 (Light/Dark)
 - **Font Picker** — Choose from 10 monospace fonts (Menlo, JetBrains Mono, Fira Code, etc.)
+- **Smart Suggestions** — AI-powered follow-up action chips after Claude finishes, with ghost text and Tab to autofill
 - **Pixel Pet** — Animated companion that reacts to Claude's activity (coding, reading, thinking, success, error)
-- **Drag & Drop Images** — Drop screenshots or files onto the window to attach
+- **Bubble Particles** — Animated bubble-shaped particles on bright themes, glow particles on dark themes
+- **Drag & Drop Images** — Drop screenshots or files onto the window, click thumbnails to preview
 - **Session Persistence** — Chat history and sessions survive app restarts
 - **Notifications** — macOS notification when Claude finishes and app is in background
 - **Plan Mode** — Toggle to use `--permission-mode plan`
+- **Liquid Glass UI** — Glass effects on input bar, thinking indicator, suggestion chips (macOS 26+)
 - **Custom App Icon** — Purple terminal prompt icon
 
 ## Requirements
@@ -40,6 +44,7 @@ open build/ClaudeStation.app
 | Shortcut | Action |
 |----------|--------|
 | Enter | Send message (or queue if busy) |
+| Tab | Autofill suggested action into input |
 | Cmd+T | New session |
 | Cmd+K | Command palette |
 | Cmd+1-9 | Switch to session by index |
@@ -57,7 +62,8 @@ Sources/
 ├── Session.swift             # Session model
 ├── SessionManager.swift      # Session lifecycle, queue, persistence
 ├── TerminalService.swift     # claude CLI communication via stream-json
-├── Theme.swift               # 8 themes + font system
+├── Theme.swift               # 13 themes + animated gradient/particle backgrounds
+├── GlassCursors.swift        # Custom cursor packs with method swizzling
 ├── PetView.swift             # Animated pixel pet (clawd sprite frames)
 ├── CommandPalette.swift      # Cmd+K action search
 ├── PasteboardWatcher.swift   # Screenshot/clipboard detection
