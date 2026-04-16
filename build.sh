@@ -76,18 +76,14 @@ done
 echo "Signing with '$IDENTITY'..."
 codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1
 
-# Install to /Applications (only if app is not running, or --force passed)
+# Install to /Applications (always — the running app reads from disk on restart)
+if [[ "$1" == "--force" ]] && pgrep -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" > /dev/null 2>&1; then
+    pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null || true; sleep 1
+fi
+rm -rf /Applications/ClaudeStation.app
+cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
 if pgrep -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" > /dev/null 2>&1; then
-    if [[ "$1" == "--force" ]]; then
-        pkill -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" 2>/dev/null || true; sleep 1
-        rm -rf /Applications/ClaudeStation.app
-        cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
-        echo "Done! Run with: open /Applications/ClaudeStation.app"
-    else
-        echo "App is running. Built to build/ but NOT installed. Restart the app manually or run: bash build.sh --force"
-    fi
+    echo "App is running. Restart it to pick up changes."
 else
-    rm -rf /Applications/ClaudeStation.app
-    cp -R "$APP" /Applications/ClaudeStation.app && echo "Installed to /Applications"
     echo "Done! Run with: open /Applications/ClaudeStation.app"
 fi

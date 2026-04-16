@@ -63,6 +63,7 @@ struct ChatMessage: Identifiable, Codable {
     var durationSeconds: Double?
     var durationApiMs: Int?
     var costUsd: Double?
+    var completionVerb: String?
     var attachedImagePath: String?
 
     init(role: ChatRole, content: String, blocks: [ContentBlock] = []) {

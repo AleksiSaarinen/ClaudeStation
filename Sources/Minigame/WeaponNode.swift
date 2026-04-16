@@ -18,12 +18,16 @@ enum WeaponFactory {
         switch type {
         case .bareHands:
             return BareHandsController()
-        case .bat, .keyboard:
+        case .bat:
             return BatController()
         case .wreckingBall:
             return WreckingBallController()
-        case .bugSwarm, .coffee:
+        case .bugSwarm:
             return BugSwarmController()
+        case .keyboard:
+            return KeyboardController()
+        case .coffee:
+            return CoffeeController()
         }
     }
 }
@@ -170,6 +174,7 @@ final class WreckingBallController: WeaponController {
     private var chainLinks: [SKShapeNode] = []
     private var ball: SKShapeNode?
     private(set) var nodes: [SKNode] = []
+    private var joints: [SKPhysicsJoint] = []
 
     private let linkCount = 8
     private let linkRadius: CGFloat = 3
@@ -179,6 +184,8 @@ final class WreckingBallController: WeaponController {
     func activate(in scene: SKScene) {}
 
     func deactivate(from scene: SKScene) {
+        for joint in joints { scene.physicsWorld.remove(joint) }
+        joints.removeAll()
         nodes.forEach { $0.removeFromParent() }
         nodes.removeAll()
         anchor = nil
@@ -231,6 +238,7 @@ final class WreckingBallController: WeaponController {
                 )
             )
             scene.physicsWorld.add(joint)
+            joints.append(joint)
 
             previousNode = link
         }
@@ -267,6 +275,7 @@ final class WreckingBallController: WeaponController {
                 )
             )
             scene.physicsWorld.add(ballJoint)
+            joints.append(ballJoint)
         }
     }
 
@@ -277,20 +286,24 @@ final class WreckingBallController: WeaponController {
     func mouseUp(at point: CGPoint, in scene: SKScene) -> CGVector? {
         guard let anchor = anchor else { return nil }
 
-        // Detach anchor by making it dynamic and removing from scene
-        anchor.physicsBody?.isDynamic = true
-        anchor.physicsBody?.affectedByGravity = false
+        // Remove all joints first to prevent physics crashes
+        for joint in joints { scene.physicsWorld.remove(joint) }
+        joints.removeAll()
+
+        // Remove anchor
         anchor.removeFromParent()
         nodes.removeAll { $0 === anchor }
         self.anchor = nil
 
         // Let everything fall, then clean up after 3 seconds
         let allNodes = nodes
-        let wait = SKAction.wait(forDuration: 3.0)
-        let fade = SKAction.fadeAlpha(to: 0, duration: 0.4)
-
         for node in allNodes {
-            node.run(SKAction.sequence([wait, fade, SKAction.removeFromParent()])) { [weak self] in
+            node.physicsBody?.affectedByGravity = true
+            node.run(SKAction.sequence([
+                SKAction.wait(forDuration: 3.0),
+                SKAction.fadeAlpha(to: 0, duration: 0.4),
+                SKAction.removeFromParent()
+            ])) { [weak self] in
                 self?.nodes.removeAll { $0 === node }
             }
         }
@@ -408,6 +421,204 @@ final class BugSwarmController: WeaponController {
                 if self?.nodes.isEmpty == true {
                     self?.active = false
                 }
+            }
+        }
+    }
+}
+
+// MARK: - KeyboardController (rapid-fire key projectiles)
+
+final class KeyboardController: WeaponController {
+    private(set) var nodes: [SKNode] = []
+    private let keys = "QWERTYASDFGHZXCVB!@#$%"
+
+    func activate(in scene: SKScene) {}
+
+    func deactivate(from scene: SKScene) {
+        nodes.forEach { $0.removeFromParent() }
+        nodes.removeAll()
+    }
+
+    func mouseDown(at point: CGPoint, in scene: SKScene) {
+        // Fire a burst of key projectiles toward the click point
+        let burstCount = 5
+        for i in 0..<burstCount {
+            let delay = TimeInterval(i) * 0.08
+            scene.run(SKAction.sequence([
+                SKAction.wait(forDuration: delay),
+                SKAction.run { [weak self] in
+                    self?.fireKey(toward: point, in: scene)
+                }
+            ]))
+        }
+    }
+
+    func mouseDragged(to point: CGPoint, in scene: SKScene) {}
+
+    func mouseUp(at point: CGPoint, in scene: SKScene) -> CGVector? {
+        return nil
+    }
+
+    private func fireKey(toward target: CGPoint, in scene: SKScene) {
+        let char = String(keys.randomElement()!)
+        let label = SKLabelNode(text: char)
+        label.fontName = "Menlo-Bold"
+        label.fontSize = 14
+        label.fontColor = .white
+        label.verticalAlignmentMode = .center
+        label.horizontalAlignmentMode = .center
+
+        // Spawn from bottom center with some spread
+        let startX = scene.size.width / 2 + CGFloat.random(in: -40...40)
+        label.position = CGPoint(x: startX, y: 20)
+
+        let body = SKPhysicsBody(circleOfRadius: 8)
+        body.categoryBitMask = weaponCategory
+        body.contactTestBitMask = buddyCategory
+        body.collisionBitMask = 0
+        body.mass = 0.3
+        body.affectedByGravity = false
+        body.linearDamping = 0.5
+        label.physicsBody = body
+
+        scene.addChild(label)
+        nodes.append(label)
+
+        // Launch toward target with spread
+        let dx = target.x - label.position.x + CGFloat.random(in: -20...20)
+        let dy = target.y - label.position.y + CGFloat.random(in: -20...20)
+        let dist = max(hypot(dx, dy), 1)
+        let speed: CGFloat = 600
+        body.velocity = CGVector(dx: dx / dist * speed, dy: dy / dist * speed)
+
+        // Spin
+        body.angularVelocity = CGFloat.random(in: -10...10)
+
+        // Fade and remove after 1.5s
+        let keyRef = label
+        keyRef.run(SKAction.sequence([
+            SKAction.wait(forDuration: 1.5),
+            SKAction.fadeOut(withDuration: 0.2),
+            SKAction.removeFromParent()
+        ])) { [weak self] in
+            self?.nodes.removeAll { $0 === keyRef }
+        }
+    }
+}
+
+// MARK: - CoffeeController (area-of-effect splash)
+
+final class CoffeeController: WeaponController {
+    private(set) var nodes: [SKNode] = []
+
+    func activate(in scene: SKScene) {}
+
+    func deactivate(from scene: SKScene) {
+        nodes.forEach { $0.removeFromParent() }
+        nodes.removeAll()
+    }
+
+    func mouseDown(at point: CGPoint, in scene: SKScene) {
+        // Drop a coffee mug that splashes on impact
+        let mug = SKShapeNode(rectOf: CGSize(width: 16, height: 20), cornerRadius: 3)
+        mug.fillColor = NSColor(red: 0.55, green: 0.27, blue: 0.07, alpha: 1)
+        mug.strokeColor = NSColor(red: 0.4, green: 0.2, blue: 0.05, alpha: 1)
+        mug.lineWidth = 1.5
+        mug.position = point
+
+        let body = SKPhysicsBody(rectangleOf: CGSize(width: 16, height: 20))
+        body.categoryBitMask = weaponCategory
+        body.contactTestBitMask = buddyCategory
+        body.collisionBitMask = buddyCategory | wallCategory
+        body.mass = 1.5
+        body.restitution = 0.1
+        mug.physicsBody = body
+
+        scene.addChild(mug)
+        nodes.append(mug)
+
+        // On contact or after 0.8s, splash
+        let mugRef = mug
+        mug.run(SKAction.sequence([
+            SKAction.wait(forDuration: 0.8),
+            SKAction.run { [weak self] in
+                self?.splash(at: mugRef.position, in: scene)
+                mugRef.removeFromParent()
+                self?.nodes.removeAll { $0 === mugRef }
+            }
+        ]))
+    }
+
+    func mouseDragged(to point: CGPoint, in scene: SKScene) {}
+
+    func mouseUp(at point: CGPoint, in scene: SKScene) -> CGVector? {
+        return nil
+    }
+
+    private func splash(at point: CGPoint, in scene: SKScene) {
+        let splashRadius: CGFloat = 60
+
+        // Visual: expanding brown ring
+        let ring = SKShapeNode(circleOfRadius: 10)
+        ring.position = point
+        ring.fillColor = NSColor(red: 0.55, green: 0.27, blue: 0.07, alpha: 0.4)
+        ring.strokeColor = NSColor(red: 0.4, green: 0.2, blue: 0.05, alpha: 0.6)
+        ring.lineWidth = 2
+        ring.zPosition = 30
+        scene.addChild(ring)
+
+        ring.run(SKAction.sequence([
+            SKAction.group([
+                SKAction.scale(to: splashRadius / 10, duration: 0.3),
+                SKAction.fadeOut(withDuration: 0.4)
+            ]),
+            SKAction.removeFromParent()
+        ]))
+
+        // Droplet particles
+        for _ in 0..<12 {
+            let drop = SKShapeNode(circleOfRadius: CGFloat.random(in: 2...4))
+            drop.fillColor = NSColor(red: 0.45, green: 0.22, blue: 0.05, alpha: 0.8)
+            drop.strokeColor = .clear
+            drop.position = point
+            drop.zPosition = 31
+            scene.addChild(drop)
+
+            let angle = CGFloat.random(in: 0...(2 * .pi))
+            let dist = CGFloat.random(in: 20...splashRadius)
+            let dest = CGPoint(x: point.x + cos(angle) * dist, y: point.y + sin(angle) * dist)
+            drop.run(SKAction.sequence([
+                SKAction.group([
+                    SKAction.move(to: dest, duration: 0.25),
+                    SKAction.fadeOut(withDuration: 0.35)
+                ]),
+                SKAction.removeFromParent()
+            ]))
+        }
+
+        // Apply impulse to all buddy parts within splash radius
+        if let ktcScene = scene as? KickTheClaudeScene, let buddy = ktcScene.buddy {
+            for part in buddy.allParts {
+                let partPos = buddy.convert(part.position, to: scene)
+                let dx = partPos.x - point.x
+                let dy = partPos.y - point.y
+                let dist = hypot(dx, dy)
+                if dist < splashRadius {
+                    let falloff = 1.0 - (dist / splashRadius)
+                    let strength: CGFloat = 300 * falloff
+                    let impulse = CGVector(
+                        dx: (dx / max(dist, 1)) * strength,
+                        dy: (dy / max(dist, 1)) * strength + 100 * falloff
+                    )
+                    part.physicsBody?.applyImpulse(impulse)
+                }
+            }
+            // Coffee splash also deals damage
+            ktcScene.gameState.dealDamage(amount: WeaponType.coffee.baseDamage)
+            buddy.takeDamage()
+            ktcScene.shakeScreen()
+            if ktcScene.gameState.hp <= 0 {
+                ktcScene.triggerKOPublic()
             }
         }
     }

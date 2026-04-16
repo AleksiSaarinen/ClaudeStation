@@ -150,7 +150,7 @@ struct WindowFrameSaver: NSViewRepresentable {
             didSet = true
             window.setFrameAutosaveName(autosaveName)
             window.titlebarAppearsTransparent = false
-            window.isMovableByWindowBackground = true
+            window.isMovableByWindowBackground = false
         }
     }
 }
@@ -176,7 +176,8 @@ struct SessionBackground: View {
     var body: some View {
         theme.chatBackground(
             toolName: session.lastToolName,
-            isRunning: session.status == .running
+            isRunning: session.status == .running,
+            session: session
         ).ignoresSafeArea()
     }
 }
@@ -256,6 +257,18 @@ struct SessionTab: View {
 
     private var isDragging: Bool { draggingSessionId == session.id }
 
+    private var sessionCost: Double {
+        // Use persisted total if available, fall back to summing visible messages
+        if session.totalCostUsd > 0 { return session.totalCostUsd }
+        return session.chatMessages.compactMap(\.costUsd).reduce(0, +)
+    }
+
+    private func formatSessionCost(_ cost: Double) -> String {
+        if cost < 0.01 { return "<$0.01" }
+        if cost < 1.0 { return String(format: "$%.2f", cost) }
+        return String(format: "$%.1f", cost)
+    }
+
     var body: some View {
         HStack(spacing: 5) {
             // Status dot — pulses when running
@@ -310,6 +323,17 @@ struct SessionTab: View {
                     .clipShape(Capsule())
             }
 
+            // Session cost badge
+            if sessionCost > 0 {
+                Text(formatSessionCost(sessionCost))
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.mutedText)
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(theme.mutedText.opacity(0.1))
+                    .clipShape(Capsule())
+            }
+
             // Close button — visible on hover or when active, with hover highlight
             if hovering || isActive {
                 Button {
@@ -340,6 +364,7 @@ struct SessionTab: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isActive ? theme.chromeBorder : .clear, lineWidth: 0.5)
         )
+        .contentShape(Rectangle())
         .opacity(isDragging ? 0.35 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: hovering)
         .animation(.easeInOut(duration: 0.15), value: isActive)

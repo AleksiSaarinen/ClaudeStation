@@ -12,12 +12,12 @@ struct SessionDetailView: View {
     @State private var activeTab: DetailTab = .terminal
     @State private var showFilePicker = false
     @State private var isDragOver = false
-    @State private var showImagePreview = false
+    @State private var previewImageIndex: Int? = nil
     @StateObject private var minigameBridge = MinigameBridge()
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
     @State private var taskStartTime: Date?
-    @StateObject private var updateChecker = UpdateChecker()
+    @ObservedObject private var updateChecker = UpdateChecker.shared
     
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +50,11 @@ struct SessionDetailView: View {
                                     pasteboardWatcher.clear()
                                 }
                             },
+                            onRemoveImage: { index in
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    pasteboardWatcher.removeImage(at: index)
+                                }
+                            },
                             onSend: {
                                 let hasPendingImages = !pasteboardWatcher.pendingImagePaths.isEmpty
                                 guard !inputText.isEmpty || hasPendingImages else { return }
@@ -75,7 +80,7 @@ struct SessionDetailView: View {
                             onAttach: {
                                 showFilePicker = true
                             },
-                            showImagePreview: $showImagePreview
+                            previewImageIndex: $previewImageIndex
                         )
                         .fileImporter(
                             isPresented: $showFilePicker,
@@ -86,11 +91,18 @@ struct SessionDetailView: View {
                                 if url.startAccessingSecurityScopedResource() {
                                     defer { url.stopAccessingSecurityScopedResource() }
                                     let tempPath = NSTemporaryDirectory() + "claudestation_\(url.lastPathComponent)"
-                                    try? FileManager.default.copyItem(at: url, to: URL(fileURLWithPath: tempPath))
-                                    if let image = NSImage(contentsOf: url) {
-                                        pasteboardWatcher.pendingImage = image
+                                    let destURL = URL(fileURLWithPath: tempPath)
+                                    // Remove existing file at dest to avoid copy failure
+                                    try? FileManager.default.removeItem(at: destURL)
+                                    try? FileManager.default.copyItem(at: url, to: destURL)
+                                    if let image = NSImage(contentsOf: destURL) ?? NSImage(contentsOf: url) {
+                                        if pasteboardWatcher.pendingImage == nil {
+                                            pasteboardWatcher.pendingImage = image
+                                        }
                                         pasteboardWatcher.pendingImagePath = tempPath
+                                        pasteboardWatcher.pendingImagePaths.append(tempPath)
                                     } else {
+                                        // Not an image NSImage can read — still attach as file for Claude to read
                                         inputText += (inputText.isEmpty ? "" : "\n") + "[File: \(tempPath)]"
                                     }
                                 }
@@ -156,27 +168,73 @@ struct SessionDetailView: View {
         }
             } // end else (terminal tab)
         .overlay {
-            if showImagePreview, let img = pasteboardWatcher.pendingImage {
-                Color.black.opacity(0.6)
-                    .ignoresSafeArea()
-                    .onTapGesture { showImagePreview = false }
-                    .overlay {
-                        VStack(spacing: 8) {
-                            Image(nsImage: img)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: 700, maxHeight: 500)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .shadow(radius: 20)
-                                .onTapGesture {}
-                            Text("\(Int(img.size.width)) x \(Int(img.size.height))")
-                                .font(.caption).foregroundStyle(.white.opacity(0.6))
+            if let idx = previewImageIndex {
+                let paths = pasteboardWatcher.pendingImagePaths
+                let safeIdx = min(idx, paths.count - 1)
+                if safeIdx >= 0, let img = NSImage(contentsOfFile: paths[safeIdx]) {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+                        .onTapGesture { previewImageIndex = nil }
+                        .overlay {
+                            HStack(spacing: 0) {
+                                // Left arrow
+                                if safeIdx > 0 {
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) { previewImageIndex = safeIdx - 1 }
+                                    } label: {
+                                        Image(systemName: "chevron.left")
+                                            .font(.system(size: 24, weight: .semibold))
+                                            .foregroundStyle(.white.opacity(0.8))
+                                            .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.leading, 12)
+                                } else {
+                                    Spacer().frame(width: 56)
+                                }
+
+                                Spacer()
+
+                                VStack(spacing: 8) {
+                                    Image(nsImage: img)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(maxWidth: 700, maxHeight: 500)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .shadow(radius: 20)
+                                        .onTapGesture {}
+                                        .id(safeIdx)
+                                        .transition(.opacity)
+                                    Text("\(safeIdx + 1) / \(paths.count)  ·  \(Int(img.size.width)) × \(Int(img.size.height))")
+                                        .font(.caption).foregroundStyle(.white.opacity(0.6))
+                                }
+
+                                Spacer()
+
+                                // Right arrow
+                                if safeIdx < paths.count - 1 {
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) { previewImageIndex = safeIdx + 1 }
+                                    } label: {
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 24, weight: .semibold))
+                                            .foregroundStyle(.white.opacity(0.8))
+                                            .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.trailing, 12)
+                                } else {
+                                    Spacer().frame(width: 56)
+                                }
+                            }
                         }
-                    }
-                    .transition(.opacity)
+                        .transition(.opacity)
+                }
             }
         }
-        .animation(.easeInOut(duration: 0.15), value: showImagePreview)
+        .animation(.easeInOut(duration: 0.15), value: previewImageIndex)
         .onAppear {
             inputFocused = true
             pasteboardWatcher.startWatching()
@@ -201,6 +259,16 @@ struct SessionDetailView: View {
                 minigameBridge.taskCompleted(durationSeconds: Int(duration))
                 taskStartTime = nil
                 CursorManager.stopAnimating()
+                session.celebrationStart = .now
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    session.celebrating = true
+                }
+                // Longer celebration with gradual wind-down (bg handles its own fade)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                    withAnimation(.easeOut(duration: 1.0)) {
+                        session.celebrating = false
+                    }
+                }
             }
         }
         .toolbarBackground(.hidden, for: .windowToolbar)
@@ -428,11 +496,12 @@ struct InputBar: View {
     var attachedImagePaths: [String] = []
     var hasAttachment: Bool = false
     var onRemoveAttachment: () -> Void = {}
+    var onRemoveImage: (Int) -> Void = { _ in }
     var onSend: () -> Void
     var onForceQueue: () -> Void
     var onAttach: () -> Void = {}
     @Environment(\.theme) var theme
-    @Binding var showImagePreview: Bool
+    @Binding var previewImageIndex: Int?
 
     private var isReady: Bool {
         session.status == .waitingForInput || session.status == .idle
@@ -445,28 +514,31 @@ struct InputBar: View {
                 // Attached images inside the pill
                 if !attachedImagePaths.isEmpty {
                     HStack(spacing: 8) {
-                        ForEach(attachedImagePaths, id: \.self) { path in
+                        ForEach(Array(attachedImagePaths.enumerated()), id: \.element) { index, path in
                             if let img = NSImage(contentsOfFile: path) {
-                                Image(nsImage: img)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(theme.toolCardBorder, lineWidth: 1)
-                                    )
-                                    .onTapGesture { showImagePreview = true }
-                                    .cursor(.pointingHand)
+                                ZStack(alignment: .topTrailing) {
+                                    Image(nsImage: img)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 56, height: 56)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(theme.toolCardBorder, lineWidth: 1)
+                                        )
+                                        .onTapGesture { previewImageIndex = index }
+                                        .cursor(.pointingHand)
+                                    Button { onRemoveImage(index) } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(.white)
+                                            .background(Circle().fill(.black.opacity(0.6)).frame(width: 10, height: 10))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .offset(x: 4, y: -4)
+                                }
                             }
                         }
-                        Button(action: onRemoveAttachment) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white)
-                                .background(Circle().fill(.black.opacity(0.6)).frame(width: 12, height: 12))
-                        }
-                        .buttonStyle(.plain)
                         Spacer()
                     }
                 } else if let img = attachedImage {
@@ -481,7 +553,7 @@ struct InputBar: View {
                                     RoundedRectangle(cornerRadius: 8)
                                         .stroke(theme.toolCardBorder, lineWidth: 1)
                                 )
-                                .onTapGesture { showImagePreview = true }
+                                .onTapGesture { previewImageIndex = 0 }
                                 .cursor(.pointingHand)
                             Button(action: onRemoveAttachment) {
                                 Image(systemName: "xmark.circle.fill")
@@ -497,10 +569,12 @@ struct InputBar: View {
                 }
 
             HStack(alignment: .center, spacing: 8) {
-                // Pixel pet mascot — fade out when thinking (it shows in the chat instead)
-                PetView(session: session)
+                // Pixel pet mascot — scale up during celebration, fade out when thinking
+                PetView(session: session, overrideState: session.celebrating ? .success : nil)
                     .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
+                    .scaleEffect(session.celebrating ? 1.3 : 1.0)
                     .opacity({ if case .thinking = session.assistantState { return 0.0 } else { return 1.0 } }())
+                    .animation(.spring(response: 0.4, dampingFraction: 0.7), value: session.celebrating)
 
                 // Plus button for attachments
                 Button(action: onAttach) {
@@ -514,14 +588,15 @@ struct InputBar: View {
                 .buttonStyle(.plain)
                 .help("Attach file")
 
-                // Text field — grows up to 8 lines, scrolls internally beyond that
+                // Text field — grows up to 8 lines, scrolls beyond that
                 let ghostLabel = session.suggestedActions.first?.label ?? "Message to Claude..."
                 TextField(ghostLabel, text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(theme.monoFont)
-                    .foregroundStyle(theme.assistantText)
+                    .foregroundStyle(theme.id == "aero" ? Color(hex: "#2E7DA8") : theme.assistantText)
                     .focused(inputFocused)
                     .lineLimit(1...8)
+                    .layoutPriority(1)
                     .onSubmit {
                         // If input is empty and we have a suggestion, send it directly
                         if inputText.isEmpty, let first = session.suggestedActions.first {
@@ -556,7 +631,10 @@ struct InputBar: View {
                 HStack(spacing: 6) {
                     // Plan mode toggle
                     Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { session.planMode.toggle() }
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            session.planMode.toggle()
+                            session.planResponseReceived = false
+                        }
                     } label: {
                         Text("Plan")
                             .font(.system(size: 11, weight: .semibold))

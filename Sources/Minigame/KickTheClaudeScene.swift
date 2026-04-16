@@ -220,13 +220,15 @@ final class KickTheClaudeScene: SKScene, SKPhysicsContactDelegate {
         guard (isAWeapon && isBBuddy) || (isBWeapon && isABuddy) else { return }
         guard !isKO else { return }
 
-        // Calculate impact speed from relative velocity.
+        // Calculate impact speed, scaled by weapon's base damage.
         let relVelocity = CGVector(
             dx: bodyA.velocity.dx - bodyB.velocity.dx,
             dy: bodyA.velocity.dy - bodyB.velocity.dy
         )
         let speed = hypot(relVelocity.dx, relVelocity.dy)
-        let baseDamage = Int(min(50, max(1, speed / 50)))
+        let speedDamage = Int(min(50, max(1, speed / 50)))
+        let weaponBase = gameState.selectedWeapon.baseDamage
+        let baseDamage = max(1, (speedDamage + weaponBase) / 2)
 
         let actual = gameState.dealDamage(amount: baseDamage)
         buddy.takeDamage()
@@ -252,16 +254,15 @@ final class KickTheClaudeScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - KO Sequence
 
+    /// Public entry point for weapon controllers that deal damage externally.
+    func triggerKOPublic() { triggerKO() }
+
     private func triggerKO() {
         guard !isKO else { return }
         isKO = true
 
         buddy.knockout()
-        // gameState.knockout() is already called inside dealDamage when hp <= 0,
-        // but in case it was reached through a different path:
-        if gameState.hp <= 0 {
-            gameState.knockout()
-        }
+        // knockout() was already called inside dealDamage when hp hit 0 — don't call again
         gameState.save()
 
         // Big "KO!" label.
@@ -311,6 +312,11 @@ final class KickTheClaudeScene: SKScene, SKPhysicsContactDelegate {
                     triggerKO()
                 }
             }
+        }
+
+        // Steer bug swarm toward buddy
+        if let swarm = weaponController as? BugSwarmController, let buddy = buddy {
+            swarm.update(buddyPosition: buddy.position)
         }
 
         // Sync HP to buddy for face expressions

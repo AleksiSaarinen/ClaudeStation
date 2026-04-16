@@ -89,6 +89,20 @@ class PasteboardWatcher: ObservableObject {
     }
 
     /// Clear UI state and delete temp files (user dismissed the attachment)
+    func removeImage(at index: Int) {
+        guard index >= 0 && index < pendingImagePaths.count else { return }
+        let path = pendingImagePaths.remove(at: index)
+        try? FileManager.default.removeItem(atPath: path)
+        if pendingImagePaths.isEmpty {
+            pendingImage = nil
+            pendingImagePath = nil
+        } else {
+            // Update the preview image to the first remaining
+            pendingImage = NSImage(contentsOfFile: pendingImagePaths[0])
+            pendingImagePath = pendingImagePaths[0]
+        }
+    }
+
     func clear() {
         pendingImage = nil
         for path in pendingImagePaths {

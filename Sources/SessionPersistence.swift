@@ -12,6 +12,8 @@ struct SessionPersistence {
         let workingDirectory: String
         let claudeSessionId: String?
         let chatMessages: [ChatMessage]
+        let contextSummary: String?
+        let totalCostUsd: Double?
     }
 
     static func save(sessions: [Session], activeSessionId: UUID?) {
@@ -21,7 +23,9 @@ struct SessionPersistence {
                 name: session.name,
                 workingDirectory: session.workingDirectory,
                 claudeSessionId: session.claudeSessionId,
-                chatMessages: Array(session.chatMessages.suffix(100)) // Keep last 100 messages
+                chatMessages: Array(session.chatMessages.suffix(100)), // Keep last 100 messages
+                contextSummary: session.contextSummary.isEmpty ? nil : session.contextSummary,
+                totalCostUsd: session.totalCostUsd > 0 ? session.totalCostUsd : nil
             )
         }
 
@@ -47,6 +51,13 @@ struct SessionPersistence {
             let session = Session(id: id, name: s.name, workingDirectory: s.workingDirectory)
             session.claudeSessionId = s.claudeSessionId
             session.chatMessages = s.chatMessages
+            session.contextSummary = s.contextSummary ?? ""
+            // Bootstrap totalCostUsd from message costs if not persisted yet
+            if let saved = s.totalCostUsd, saved > 0 {
+                session.totalCostUsd = saved
+            } else {
+                session.totalCostUsd = session.chatMessages.compactMap(\.costUsd).reduce(0, +)
+            }
             session.status = .waitingForInput
             return session
         }

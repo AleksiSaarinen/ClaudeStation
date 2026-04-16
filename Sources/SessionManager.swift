@@ -38,9 +38,13 @@ class SessionManager: ObservableObject {
             }
         }
 
-        // Generate suggestions for any restored session that has chat history
+        // Generate suggestions and initial context summaries for restored sessions
         for session in sessions where session.status == .waitingForInput && !session.chatMessages.isEmpty {
             TerminalService.shared.generateSuggestions(for: session)
+            // Bootstrap context summary for sessions that predate managed context
+            if session.contextSummary.isEmpty && session.chatMessages.count >= 2 && AppSettings.shared.managedContext {
+                TerminalService.shared.bootstrapContextSummary(for: session)
+            }
         }
 
         // Listen for save triggers from TerminalService

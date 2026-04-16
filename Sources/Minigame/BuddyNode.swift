@@ -13,6 +13,7 @@ final class BuddyNode: SKNode {
     // MARK: HP (set by scene each frame)
     var currentHP: CGFloat = 100
     var currentMaxHP: CGFloat = 100
+    private var lastFaceBracket: Int = -1 // 0=KO, 1=worried, 2=normal
 
     // MARK: Body Parts
 
@@ -32,6 +33,10 @@ final class BuddyNode: SKNode {
     private var leftEye: SKShapeNode
     private var rightEye: SKShapeNode
     private var mouth: SKShapeNode
+
+    // MARK: Joints (stored for reset)
+
+    private var storedJoints: [SKPhysicsJoint] = []
 
     // MARK: Speech
 
@@ -249,13 +254,23 @@ final class BuddyNode: SKNode {
     }
 
     func updateFace(hp: CGFloat, maxHP: CGFloat, isHit: Bool) {
+        let ratio = hp / maxHP
+        let effectiveRatio = isHit ? min(ratio, 0.45) : ratio
+
+        // Determine bracket: 0=KO, 1=worried, 2=normal
+        let bracket: Int
+        if effectiveRatio > 0.5 { bracket = 2 }
+        else if effectiveRatio >= 0.2 { bracket = 1 }
+        else { bracket = 0 }
+
+        // Skip rebuild if bracket hasn't changed
+        guard bracket != lastFaceBracket else { return }
+        lastFaceBracket = bracket
+
         // Remove old face elements
         leftEye.removeFromParent()
         rightEye.removeFromParent()
         mouth.removeFromParent()
-
-        let ratio = hp / maxHP
-        let effectiveRatio = isHit ? min(ratio, 0.45) : ratio
 
         if effectiveRatio > 0.5 {
             // Normal: dot eyes, small smile
@@ -354,6 +369,7 @@ final class BuddyNode: SKNode {
     // MARK: - Joints
 
     func setupJoints(in scene: SKScene) {
+        storedJoints.removeAll()
         let deg2rad: CGFloat = .pi / 180.0
 
         // Helper to create a pin joint with rotation limits
@@ -372,6 +388,7 @@ final class BuddyNode: SKNode {
             joint.lowerAngleLimit = lowerAngle * deg2rad
             joint.upperAngleLimit = upperAngle * deg2rad
             scene.physicsWorld.add(joint)
+            storedJoints.append(joint)
         }
 
         // Neck: head ↔ torso
@@ -457,7 +474,8 @@ final class BuddyNode: SKNode {
             part.fillColor = NSColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1.0)
         }
 
-        // Hit face
+        // Force face rebuild for hit expression
+        lastFaceBracket = -1
         updateFace(hp: currentHP, maxHP: currentMaxHP, isHit: true)
 
         // Wiggle
@@ -478,6 +496,7 @@ final class BuddyNode: SKNode {
                         part.fillColor = originalColors[i]
                     }
                 }
+                self.lastFaceBracket = -1
                 self.updateFace(hp: self.currentHP, maxHP: self.currentMaxHP, isHit: false)
             }
         ])
@@ -516,7 +535,17 @@ final class BuddyNode: SKNode {
 
     func resetPosition(in size: CGSize) {
         let centerX = size.width / 2
-        let centerY = size.height / 2
+        let centerY = size.height * 0.3
+
+        // Remove all existing joints from the scene before repositioning
+        if let scene = self.scene {
+            // SpriteKit doesn't expose joints directly — remove all and recreate
+            // We store joint references to remove them cleanly
+            for joint in storedJoints {
+                scene.physicsWorld.remove(joint)
+            }
+            storedJoints.removeAll()
+        }
 
         self.position = CGPoint(x: centerX, y: centerY)
 
@@ -537,6 +566,11 @@ final class BuddyNode: SKNode {
             part.physicsBody?.velocity = .zero
             part.physicsBody?.angularVelocity = 0
             part.zRotation = 0
+        }
+
+        // Recreate joints at the new position
+        if let scene = self.scene {
+            setupJoints(in: scene)
         }
     }
 

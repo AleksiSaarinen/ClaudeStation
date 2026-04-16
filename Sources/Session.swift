@@ -38,9 +38,15 @@ class Session: ObservableObject, Identifiable {
     @Published var chatMessages: [ChatMessage] = []
     @Published var assistantState: AssistantState = .idle
     @Published var planMode: Bool = false
+    @Published var planResponseReceived: Bool = false
     @Published var lastToolName: String?
     @Published var lastToolCommand: String?
+    @Published var sleepEndTime: Date?
     @Published var suggestedActions: [(icon: String, label: String, prompt: String)] = []
+    @Published var contextSummary: String = ""
+    @Published var totalCostUsd: Double = 0
+    @Published var celebrating: Bool = false
+    var celebrationStart: Date = .distantPast
 
     /// Claude Code session ID for --resume multi-turn
     var claudeSessionId: String?

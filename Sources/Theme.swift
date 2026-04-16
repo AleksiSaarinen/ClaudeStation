@@ -1,5 +1,12 @@
 import SwiftUI
 
+struct PetPalette: Equatable {
+    let body: NSColor       // replaces #D27850
+    let highlight: NSColor  // replaces #E18C64
+    let shadow: NSColor     // replaces #B96441
+    let eyes: NSColor       // replaces #1E1E1E
+}
+
 struct Theme: Identifiable, Equatable {
     let id: String
     let name: String
@@ -43,12 +50,15 @@ struct Theme: Identifiable, Equatable {
     let fontUI: String
     let borderRadius: CGFloat
 
+    // Pet palette (nil = use original colors)
+    var petPalette: PetPalette? = nil
+
     static func == (lhs: Theme, rhs: Theme) -> Bool { lhs.id == rhs.id }
 
     /// Background view — animated gradient if configured, solid color otherwise
-    @ViewBuilder func chatBackground(toolName: String? = nil, isRunning: Bool = false) -> some View {
+    @ViewBuilder func chatBackground(toolName: String? = nil, isRunning: Bool = false, session: Session? = nil) -> some View {
         if chatBgGradientEnd != nil {
-            AnimatedGradientBackground(theme: self, toolName: toolName, isRunning: isRunning)
+            AnimatedGradientBackground(theme: self, toolName: toolName, isRunning: isRunning, session: session)
         } else {
             chatBg
         }
@@ -70,8 +80,12 @@ struct AnimatedGradientBackground: View {
     let theme: Theme
     var toolName: String?
     var isRunning: Bool
+    var session: Session?
     @State private var particles: [Particle] = Self.makeParticles(count: 60)
     @State private var startTime: Date = .now
+    /// Smoothed running intensity (0 = idle, 1 = fully running). Eases transitions.
+    @State private var runIntensity: Double = 0
+    @State private var lastRunningState: Bool = false
 
     struct Particle {
         var x: Double
@@ -85,20 +99,33 @@ struct AnimatedGradientBackground: View {
         var life: Double
     }
 
-    /// Accent color shifts based on what Claude is doing
+    /// Accent color shifts based on what Claude is doing.
+    /// During celebration, blends from last tool color back to accent.
     private var activityColor: NSColor {
-        guard isRunning, let tool = toolName else {
-            return NSColor(theme.accent)
+        let toolColor: NSColor? = {
+            guard let tool = toolName else { return nil }
+            switch tool {
+            case "Read":                return NSColor(Color(hex: "#60A5FA"))
+            case "Write", "Edit":      return NSColor(Color(hex: "#34D399"))
+            case "Bash":               return NSColor(Color(hex: "#FBBF24"))
+            case "Grep", "Glob":       return NSColor(Color(hex: "#A78BFA"))
+            case "Agent":              return NSColor(Color(hex: "#F472B6"))
+            case "WebSearch","WebFetch":return NSColor(Color(hex: "#38BDF8"))
+            default:                   return nil
+            }
+        }()
+        let accent = NSColor(theme.accent)
+
+        if isRunning {
+            return toolColor ?? accent
         }
-        switch tool {
-        case "Read":                return NSColor(Color(hex: "#60A5FA")) // blue — reading
-        case "Write", "Edit":      return NSColor(Color(hex: "#34D399")) // green — writing
-        case "Bash":               return NSColor(Color(hex: "#FBBF24")) // amber — executing
-        case "Grep", "Glob":       return NSColor(Color(hex: "#A78BFA")) // purple — searching
-        case "Agent":              return NSColor(Color(hex: "#F472B6")) // pink — thinking
-        case "WebSearch","WebFetch":return NSColor(Color(hex: "#38BDF8")) // cyan — web
-        default:                   return NSColor(theme.accent)
+
+        // During celebration, use accent (blobs shouldn't flash with tool colors)
+        if celIntensity > 0 {
+            return accent
         }
+
+        return accent
     }
 
     static func makeParticles(count: Int) -> [Particle] {
@@ -117,19 +144,39 @@ struct AnimatedGradientBackground: View {
         }
     }
 
-    /// Particle speed multiplier based on activity
+    /// How far into the celebration we are (0 = just started, 1+ = winding down)
+    private var celProgress: Double {
+        guard session?.celebrating == true,
+              let start = session?.celebrationStart else { return 0 }
+        return Date().timeIntervalSince(start)
+    }
+
+    /// Celebration intensity: gentle ramp up, long slow fade
+    private var celIntensity: Double {
+        guard celProgress > 0 else { return 0 }
+        let rampUp = min(celProgress / 0.8, 1.0) // 0.8s gentle ramp up
+        let rampDown = max(0, 1.0 - (celProgress - 2.0) / 3.0) // fade from 2s to 5s
+        return rampUp * rampDown
+    }
+
+    /// Effective activity level — blends runIntensity with celIntensity for smooth transitions
+    private var activity: Double {
+        max(runIntensity, celIntensity)
+    }
+
+    /// Particle speed multiplier — smoothly transitions between states
     private var speedMult: Double {
-        isRunning ? 30.0 : 0.8
+        0.8 + 29.2 * runIntensity + 9.2 * celIntensity
     }
 
-    /// Particle vertical direction: positive = rise up (active), negative = drift down (idle)
+    /// Particle vertical direction: smoothly transitions between rise (-1) and drift (+1)
     private var particleDirection: Double {
-        isRunning ? -1.0 : 1.0
+        activity > 0.01 ? -1.0 : 1.0
     }
 
-    /// Blob opacity changes with activity
+    /// Blob opacity — only responds to running state, not celebration
     private var blobOpacity: Double {
-        isRunning ? 0.18 : 0.12
+        0.12 + 0.06 * runIntensity
     }
 
     var body: some View {
@@ -159,9 +206,11 @@ struct AnimatedGradientBackground: View {
                     (0.5,  0.5, 0.4, 0.3, false),
                     (0.3,  0.8, 0.5, 0.6, true),
                 ]
+                // Blobs drift slowly — speed based on smooth activity
+                let blobSpeed = 0.5 + 0.5 * runIntensity
                 for (bx, by, fx, fy, useAlt) in blobs {
-                    let cx = size.width * (bx + 0.2 * sin(t * 0.05 * fx * speedMult))
-                    let cy = size.height * (by + 0.15 * cos(t * 0.05 * fy * speedMult))
+                    let cx = size.width * (bx + 0.2 * sin(t * 0.05 * fx * blobSpeed))
+                    let cy = size.height * (by + 0.15 * cos(t * 0.05 * fy * blobSpeed))
                     context.fill(
                         Path(ellipseIn: CGRect(
                             x: cx - blobRadius, y: cy - blobRadius,
@@ -176,87 +225,92 @@ struct AnimatedGradientBackground: View {
                     )
                 }
 
-                // Particles
+                // Particles — render multiple passes when celebrating for burst effect
                 let bgBrightness = NSColor(base).brightnessComponent
                 let isBubbleMode = bgBrightness > 0.35
                 let accentColor = isBubbleMode ? NSColor(Color(hex: "#B3E5FC")) : activityColor
-                for i in particles.indices {
-                    let p = particles[i]
-                    let elapsed = t * p.phaseSpeed
-                    let wobbleX = isRunning ? sin(elapsed * 2 + p.phase) * 0.008 : sin(elapsed + p.phase) * 0.02
-                    var wx = (p.x + p.speedX * t * (isRunning ? 0.3 : speedMult) + wobbleX)
-                        .truncatingRemainder(dividingBy: 1.0)
-                    var wy = (p.y + p.speedY * t * speedMult * particleDirection)
-                        .truncatingRemainder(dividingBy: 1.0)
-                    if wx < 0 { wx += 1.0 }
-                    if wy < 0 { wy += 1.0 }
+                let celI = celIntensity
+                let passes = celI > 0.1 ? 2 : 1
+                let active = activity > 0.01
+                let speed = speedMult
 
-                    let edgeFade = min(
-                        min(wx, 1.0 - wx) * 8,
-                        min(wy, 1.0 - wy) * 8
-                    ).clamped(to: 0...1)
-                    let twinkleSpeed = isRunning ? p.phaseSpeed * 6 : p.phaseSpeed * 2
-                    let twinkle = isRunning ? 0.6 + 0.4 * sin(t * twinkleSpeed + p.phase) : 0.4 + 0.6 * sin(t * twinkleSpeed + p.phase)
-                    let sizeScale = isRunning ? 1.0 + 0.3 * sin(t * p.phaseSpeed * 3 + p.phase) : 1.0
-                    let alpha = p.opacity * edgeFade * twinkle
+                for pass in 0..<passes {
+                    let phaseOffset = Double(pass) * 1.7
+                    let posOffset = Double(pass) * 0.23
 
-                    let screenX = wx * size.width
-                    let screenY = wy * size.height
+                    for i in particles.indices {
+                        let p = particles[i]
+                        let elapsed = t * p.phaseSpeed
+                        let wobbleX = active ? sin(elapsed * 2 + p.phase + phaseOffset) * 0.008 : sin(elapsed + p.phase) * 0.02
+                        var wx = (p.x + posOffset + p.speedX * t * (active ? 0.3 : speed) + wobbleX)
+                            .truncatingRemainder(dividingBy: 1.0)
+                        var wy = (p.y + posOffset * 0.7 + p.speedY * t * speed * particleDirection)
+                            .truncatingRemainder(dividingBy: 1.0)
+                        if wx < 0 { wx += 1.0 }
+                        if wy < 0 { wy += 1.0 }
 
-                    if isBubbleMode {
-                        // Bubble particles
-                        let r = (p.size * sizeScale) * 2.5
-                        let rect = CGRect(x: screenX - r, y: screenY - r, width: r * 2, height: r * 2)
+                        let edgeFade = min(
+                            min(wx, 1.0 - wx) * 8,
+                            min(wy, 1.0 - wy) * 8
+                        ).clamped(to: 0...1)
+                        let twinkleSpeed = active ? p.phaseSpeed * 6 : p.phaseSpeed * 2
+                        let twinkle = active ? 0.6 + 0.4 * sin(t * twinkleSpeed + p.phase + phaseOffset) : 0.4 + 0.6 * sin(t * twinkleSpeed + p.phase)
+                        let sizeScale = active ? 1.0 + 0.3 * sin(t * p.phaseSpeed * 3 + p.phase + phaseOffset) : 1.0
+                        let alpha = p.opacity * edgeFade * twinkle * (pass > 0 ? celI : 1.0)
 
-                        // Bubble fill — very subtle transparent
-                        context.fill(
-                            Path(ellipseIn: rect),
-                            with: .color(Color.white.opacity(alpha * 0.08))
-                        )
+                        let screenX = wx * size.width
+                        let screenY = wy * size.height
 
-                        // Bubble ring
-                        context.stroke(
-                            Path(ellipseIn: rect),
-                            with: .color(Color.white.opacity(alpha * 0.35)),
-                            lineWidth: 0.6
-                        )
-
-                        // Highlight — small bright spot upper-left
-                        let hlSize = r * 0.35
-                        let hlX = screenX - r * 0.35
-                        let hlY = screenY - r * 0.35
-                        context.fill(
-                            Path(ellipseIn: CGRect(x: hlX - hlSize/2, y: hlY - hlSize/2, width: hlSize, height: hlSize)),
-                            with: .color(Color.white.opacity(alpha * 0.5))
-                        )
-                    } else {
-                        // Standard glow particles
-                        let r = p.size * sizeScale
-                        let glowMult = isRunning ? 3.0 : 2.0
-                        let glowAlpha = isRunning ? alpha * 0.7 : alpha * 0.5
-                        context.fill(
-                            Path(ellipseIn: CGRect(x: screenX - r * glowMult, y: screenY - r * glowMult, width: r * glowMult * 2, height: r * glowMult * 2)),
-                            with: .radialGradient(
-                                Gradient(colors: [
-                                    Color(nsColor: accentColor.withAlphaComponent(glowAlpha)),
-                                    .clear
-                                ]),
-                                center: CGPoint(x: screenX, y: screenY),
-                                startRadius: 0,
-                                endRadius: r * glowMult
+                        if isBubbleMode {
+                            let r = (p.size * sizeScale) * 2.5
+                            let rect = CGRect(x: screenX - r, y: screenY - r, width: r * 2, height: r * 2)
+                            context.fill(Path(ellipseIn: rect), with: .color(Color.white.opacity(alpha * 0.08)))
+                            context.stroke(Path(ellipseIn: rect), with: .color(Color.white.opacity(alpha * 0.35)), lineWidth: 0.6)
+                            let hlSize = r * 0.35
+                            let hlX = screenX - r * 0.35
+                            let hlY = screenY - r * 0.35
+                            context.fill(
+                                Path(ellipseIn: CGRect(x: hlX - hlSize/2, y: hlY - hlSize/2, width: hlSize, height: hlSize)),
+                                with: .color(Color.white.opacity(alpha * 0.5))
                             )
-                        )
-                        context.fill(
-                            Path(ellipseIn: CGRect(x: screenX - r/2, y: screenY - r/2, width: r, height: r)),
-                            with: .color(Color(nsColor: accentColor.withAlphaComponent(alpha * 0.8)))
-                        )
+                        } else {
+                            let r = p.size * sizeScale
+                            let glowMult = active ? 3.0 : 2.0
+                            let glowAlpha = active ? alpha * 0.7 : alpha * 0.5
+                            context.fill(
+                                Path(ellipseIn: CGRect(x: screenX - r * glowMult, y: screenY - r * glowMult, width: r * glowMult * 2, height: r * glowMult * 2)),
+                                with: .radialGradient(
+                                    Gradient(colors: [
+                                        Color(nsColor: accentColor.withAlphaComponent(glowAlpha)),
+                                        .clear
+                                    ]),
+                                    center: CGPoint(x: screenX, y: screenY),
+                                    startRadius: 0,
+                                    endRadius: r * glowMult
+                                )
+                            )
+                            context.fill(
+                                Path(ellipseIn: CGRect(x: screenX - r/2, y: screenY - r/2, width: r, height: r)),
+                                with: .color(Color(nsColor: accentColor.withAlphaComponent(alpha * 0.8)))
+                            )
+                        }
                     }
                 }
+
             }
         }
         .ignoresSafeArea()
         .onAppear {
             startTime = .now
+            runIntensity = isRunning ? 1.0 : 0.0
+            lastRunningState = isRunning
+        }
+        .onChange(of: isRunning) { _, newValue in
+            guard newValue != lastRunningState else { return }
+            lastRunningState = newValue
+            withAnimation(.easeInOut(duration: newValue ? 1.5 : 2.5)) {
+                runIntensity = newValue ? 1.0 : 0.0
+            }
         }
     }
 }
@@ -297,6 +351,7 @@ extension Theme {
         costText: Color(hex: "#5A5A7A"), timestampText: Color(hex: "#5A5A7A"),
         promptChar: "❯", promptColor: Color(hex: "#7B6FDE"),
         fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12
+        // Midnight: keep original orange pet — warm contrast on dark
     )
 
     static let aurora = Theme(
@@ -311,7 +366,13 @@ extension Theme {
         mutedText: Color(hex: "#616E88"), successDot: Color(hex: "#A3BE8C"),
         costText: Color(hex: "#616E88"), timestampText: Color(hex: "#616E88"),
         promptChar: "❯", promptColor: Color(hex: "#88C0D0"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#88C0D0")),
+            highlight: NSColor(Color(hex: "#A3D4E0")),
+            shadow: NSColor(Color(hex: "#6BA8B8")),
+            eyes: NSColor(Color(hex: "#2E3440"))
+        )
     )
 
     static let rose = Theme(
@@ -326,7 +387,13 @@ extension Theme {
         mutedText: Color(hex: "#524F67"), successDot: Color(hex: "#9CCFD8"),
         costText: Color(hex: "#524F67"), timestampText: Color(hex: "#524F67"),
         promptChar: "❯", promptColor: Color(hex: "#EB6F92"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#E0DEF4")),
+            highlight: NSColor(Color(hex: "#F0EEF8")),
+            shadow: NSColor(Color(hex: "#C0BDD4")),
+            eyes: NSColor(Color(hex: "#EB6F92"))
+        )
     )
 
     static let paper = Theme(
@@ -341,7 +408,13 @@ extension Theme {
         mutedText: Color(hex: "#A09888"), successDot: Color(hex: "#5A8A5A"),
         costText: Color(hex: "#A09888"), timestampText: Color(hex: "#A09888"),
         promptChar: "❯", promptColor: Color(hex: "#C0593A"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#C8B8A0")),
+            highlight: NSColor(Color(hex: "#D8CDB8")),
+            shadow: NSColor(Color(hex: "#A89880")),
+            eyes: NSColor(Color(hex: "#5C4A3A"))
+        )
     )
 
     static let phosphor = Theme(
@@ -356,7 +429,13 @@ extension Theme {
         mutedText: Color(hex: "#1A6B1A"), successDot: Color(hex: "#33FF33"),
         costText: Color(hex: "#1A6B1A"), timestampText: Color(hex: "#1A6B1A"),
         promptChar: ">", promptColor: Color(hex: "#33FF33"),
-        fontMono: "Menlo", fontUI: "Menlo", borderRadius: 0
+        fontMono: "Menlo", fontUI: "Menlo", borderRadius: 0,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#33FF33")),
+            highlight: NSColor(Color(hex: "#66FF66")),
+            shadow: NSColor(Color(hex: "#1ABF1A")),
+            eyes: NSColor(Color(hex: "#0A0A0A"))
+        )
     )
 
     static let deepSea = Theme(
@@ -371,7 +450,13 @@ extension Theme {
         mutedText: Color(hex: "#3A5A7A"), successDot: Color(hex: "#00D4AA"),
         costText: Color(hex: "#3A5A7A"), timestampText: Color(hex: "#3A5A7A"),
         promptChar: "❯", promptColor: Color(hex: "#00D4AA"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#4A90B8")),
+            highlight: NSColor(Color(hex: "#60A8D0")),
+            shadow: NSColor(Color(hex: "#3A7098")),
+            eyes: NSColor(Color(hex: "#C0D8E8"))
+        )
     )
 
     static let amber = Theme(
@@ -386,7 +471,13 @@ extension Theme {
         mutedText: Color(hex: "#6A5030"), successDot: Color(hex: "#FFB347"),
         costText: Color(hex: "#6A5030"), timestampText: Color(hex: "#6A5030"),
         promptChar: ">", promptColor: Color(hex: "#FFB347"),
-        fontMono: "Menlo", fontUI: "Menlo", borderRadius: 4
+        fontMono: "Menlo", fontUI: "Menlo", borderRadius: 4,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#FFB347")),
+            highlight: NSColor(Color(hex: "#FFCC77")),
+            shadow: NSColor(Color(hex: "#CC8A30")),
+            eyes: NSColor(Color(hex: "#1A1410"))
+        )
     )
 
     static let sakura = Theme(
@@ -401,7 +492,13 @@ extension Theme {
         mutedText: Color(hex: "#B0A0A0"), successDot: Color(hex: "#7AB87A"),
         costText: Color(hex: "#B0A0A0"), timestampText: Color(hex: "#B0A0A0"),
         promptChar: "❯", promptColor: Color(hex: "#D4728C"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#F8C8D0")),
+            highlight: NSColor(Color(hex: "#FFE0E8")),
+            shadow: NSColor(Color(hex: "#D8A0B0")),
+            eyes: NSColor(Color(hex: "#8B3A50"))
+        )
     )
 
     static let violet = Theme(
@@ -416,7 +513,13 @@ extension Theme {
         mutedText: Color(hex: "#5E4880"), successDot: Color(hex: "#86EFAC"),
         costText: Color(hex: "#5E4880"), timestampText: Color(hex: "#5E4880"),
         promptChar: "❯", promptColor: Color(hex: "#A855F7"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#B088E0")),
+            highlight: NSColor(Color(hex: "#C8A8F0")),
+            shadow: NSColor(Color(hex: "#8860C0")),
+            eyes: NSColor(Color(hex: "#F0F0FF"))
+        )
     )
 
     static let neon = Theme(
@@ -431,7 +534,13 @@ extension Theme {
         mutedText: Color(hex: "#4A4A70"), successDot: Color(hex: "#00FF88"),
         costText: Color(hex: "#4A4A70"), timestampText: Color(hex: "#4A4A70"),
         promptChar: "▸", promptColor: Color(hex: "#FF3CAC"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 10
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 10,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#FF00FF")),
+            highlight: NSColor(Color(hex: "#FF66FF")),
+            shadow: NSColor(Color(hex: "#CC00CC")),
+            eyes: NSColor(Color(hex: "#00FFFF"))
+        )
     )
 
     static let melon = Theme(
@@ -446,7 +555,13 @@ extension Theme {
         mutedText: Color(hex: "#40C070"), successDot: Color(hex: "#50FF90"),
         costText: Color(hex: "#40C070"), timestampText: Color(hex: "#40C070"),
         promptChar: "❯", promptColor: Color(hex: "#FF6EB4"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 6
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 6,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#30E080")),
+            highlight: NSColor(Color(hex: "#50F0A0")),
+            shadow: NSColor(Color(hex: "#20B060")),
+            eyes: NSColor(Color(hex: "#E8FFF0"))
+        )
     )
 
     static let sorbet = Theme(
@@ -461,7 +576,13 @@ extension Theme {
         mutedText: Color(hex: "#9A88B8"), successDot: Color(hex: "#30C070"),
         costText: Color(hex: "#9A88B8"), timestampText: Color(hex: "#9A88B8"),
         promptChar: "❯", promptColor: Color(hex: "#FF4500"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 8
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 8,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#D0B8E8")),
+            highlight: NSColor(Color(hex: "#E0D0F0")),
+            shadow: NSColor(Color(hex: "#B098D0")),
+            eyes: NSColor(Color(hex: "#5A3A70"))
+        )
     )
 
     static let aero = Theme(
@@ -476,7 +597,13 @@ extension Theme {
         mutedText: Color(hex: "#B3D9F2"), successDot: Color(hex: "#66BB6A"),
         costText: Color(hex: "#80DEEA"), timestampText: Color(hex: "#90CAF9"),
         promptChar: ">", promptColor: Color(hex: "#4CAF50"),
-        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 14,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#E8F4FC")),
+            highlight: NSColor(Color(hex: "#FFFFFF")),
+            shadow: NSColor(Color(hex: "#C0DAE8")),
+            eyes: NSColor(Color(hex: "#1565C0"))
+        )
     )
 
     static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon, melon, sorbet, aero]
@@ -498,7 +625,8 @@ extension Theme {
             mutedText: mutedText, successDot: successDot,
             costText: costText, timestampText: timestampText,
             promptChar: promptChar, promptColor: promptColor,
-            fontMono: mono ?? fontMono, fontUI: ui ?? fontUI, borderRadius: borderRadius
+            fontMono: mono ?? fontMono, fontUI: ui ?? fontUI, borderRadius: borderRadius,
+            petPalette: petPalette
         )
     }
 

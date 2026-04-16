@@ -26,9 +26,11 @@ class MinigameBridge: ObservableObject {
     init() {
         self.gameState = GameState.load()
 
-        // Auto-save on token/level changes
+        // Auto-save on token/level/xp/KO changes (debounced)
         gameState.$tokens
             .merge(with: gameState.$level)
+            .merge(with: gameState.$xp)
+            .merge(with: gameState.$totalKOs)
             .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.gameState.save() }
             .store(in: &cancellables)

@@ -244,6 +244,13 @@ struct GeneralSettingsTab: View {
                        isOn: $settings.alwaysBypassPermissions)
             }
 
+            Section("Context") {
+                Toggle("Smart context management", isOn: $settings.managedContext)
+                Text("Keeps token usage constant by summarizing older messages instead of sending full history. Dramatically reduces cost for long sessions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Queue Behavior") {
                 Toggle("Auto-process queue when Claude is ready",
                        isOn: $settings.autoProcessQueue)

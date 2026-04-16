@@ -31,6 +31,9 @@ class AppSettings: ObservableObject {
     @Published var maxOutputBufferLines: Int {
         didSet { UserDefaults.standard.set(maxOutputBufferLines, forKey: "maxOutputBufferLines") }
     }
+    @Published var managedContext: Bool {
+        didSet { UserDefaults.standard.set(managedContext, forKey: "managedContext") }
+    }
 
     @Published var launchProfiles: [LaunchProfile] = []
 
@@ -42,6 +45,7 @@ class AppSettings: ObservableObject {
         self.alwaysBypassPermissions = defaults.object(forKey: "alwaysBypassPermissions") as? Bool ?? true
         self.autoProcessQueue = defaults.object(forKey: "autoProcessQueue") as? Bool ?? true
         self.maxOutputBufferLines = defaults.object(forKey: "maxOutputBufferLines") as? Int ?? 10000
+        self.managedContext = defaults.object(forKey: "managedContext") as? Bool ?? true
         loadProfiles()
     }
 

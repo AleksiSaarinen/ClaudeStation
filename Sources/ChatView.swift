@@ -9,6 +9,9 @@ struct ChatView: View {
     @State private var userScrolledUp = false
     @State private var scrollObservers: [NSObjectProtocol] = []
     @State private var isProgrammaticScroll = false
+    @State private var chatPreviewImages: [String] = []
+    @State private var chatPreviewIndex: Int? = nil
+    @State private var visibleMessageCount: Int = 20
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -52,18 +55,45 @@ struct ChatView: View {
                         .padding(.top, 20)
                 }
 
-                ForEach(session.chatMessages.suffix(50)) { message in
+                // Show "Load older" button when there are hidden messages
+                let totalCount = session.chatMessages.count
+                let visibleMessages = Array(session.chatMessages.suffix(visibleMessageCount))
+                if totalCount > visibleMessageCount {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            visibleMessageCount = min(visibleMessageCount + 20, totalCount)
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.up.circle").font(.caption)
+                            Text("Load \(min(20, totalCount - visibleMessageCount)) older messages (\(totalCount - visibleMessageCount) hidden)")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(theme.mutedText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(theme.assistantBubble.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 8)
+                }
+
+                ForEach(visibleMessages) { message in
                     if message.role == .user {
-                        UserMessageRow(message: message)
+                        UserMessageRow(message: message, onImageTap: { paths, idx in
+                            chatPreviewImages = paths
+                            chatPreviewIndex = idx
+                        })
                             .id(message.id)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .trailing).combined(with: .opacity),
                                 removal: .opacity
                             ))
                     } else {
-                        let isStreaming = message.id == session.chatMessages.last?.id
+                        let isLast = message.id == session.chatMessages.last?.id
+                        let isStreaming = isLast
                             && session.assistantState == .responding
-                        AssistantMessageRow(message: message, isStreaming: isStreaming)
+                        AssistantMessageRow(message: message, isStreaming: isStreaming, isLatestMessage: isLast)
                             .id(message.id)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .leading).combined(with: .opacity),
@@ -93,7 +123,8 @@ struct ChatView: View {
                 if session.planMode
                     && session.status == .waitingForInput
                     && session.chatMessages.last?.role == .assistant
-                    && lastMessageLooksLikePlan {
+                    && lastMessageLooksLikePlan
+                    && session.planResponseReceived {
                     ExecutePlanButton(session: session)
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
@@ -126,8 +157,15 @@ struct ChatView: View {
         .onChange(of: session.assistantState) { _, _ in
             if !userScrolledUp { scrollToBottom() }
         }
+        .onChange(of: session.messageQueue.count) { _, _ in
+            // Queue strip appearing/growing changes bottom inset — re-scroll
+            if !userScrolledUp { smoothScrollToBottom() }
+        }
         .onAppear {
-            scrollToBottom()
+            userScrolledUp = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                scrollToBottom()
+            }
         }
         .onDisappear {
             // Clean up notification observers
@@ -147,7 +185,7 @@ struct ChatView: View {
                     .contentShape(Circle())
                     .onTapGesture {
                         userScrolledUp = false
-                        scrollToBottom()
+                        bouncyScrollToBottom()
                     }
                     .padding(.bottom, 12)
                     .transition(.asymmetric(
@@ -157,6 +195,75 @@ struct ChatView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: userScrolledUp)
+        .overlay {
+            if let idx = chatPreviewIndex, idx < chatPreviewImages.count,
+               let img = NSImage(contentsOfFile: chatPreviewImages[idx]) {
+                let paths = chatPreviewImages
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture { chatPreviewIndex = nil }
+                    .overlay {
+                        HStack(spacing: 0) {
+                            if idx > 0 {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) { chatPreviewIndex = idx - 1 }
+                                } label: {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.8))
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 12)
+                            } else {
+                                Spacer().frame(width: 56)
+                            }
+
+                            Spacer()
+
+                            VStack(spacing: 8) {
+                                Image(nsImage: img)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxWidth: 700, maxHeight: 500)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .shadow(radius: 20)
+                                    .onTapGesture {}
+                                    .id(idx)
+                                    .transition(.opacity)
+                                if paths.count > 1 {
+                                    Text("\(idx + 1) / \(paths.count)  ·  \(Int(img.size.width)) × \(Int(img.size.height))")
+                                        .font(.caption).foregroundStyle(.white.opacity(0.6))
+                                } else {
+                                    Text("\(Int(img.size.width)) × \(Int(img.size.height))")
+                                        .font(.caption).foregroundStyle(.white.opacity(0.6))
+                                }
+                            }
+
+                            Spacer()
+
+                            if idx < paths.count - 1 {
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) { chatPreviewIndex = idx + 1 }
+                                } label: {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.8))
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.trailing, 12)
+                            } else {
+                                Spacer().frame(width: 56)
+                            }
+                        }
+                    }
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: chatPreviewIndex)
     }
 
     /// Subscribe to NSScrollView clip view bounds changes to detect user scrolls.
@@ -193,7 +300,7 @@ struct ChatView: View {
         let viewportHeight = scrollView.contentView.bounds.height
         let offsetY = scrollView.contentView.bounds.origin.y
         let inputBarOffset: CGFloat = 56
-        return offsetY + viewportHeight >= contentHeight - 30 + inputBarOffset
+        return offsetY + viewportHeight >= contentHeight - 80 + inputBarOffset
     }
 
     /// Scroll the underlying NSScrollView to the bottom.
@@ -216,7 +323,7 @@ struct ChatView: View {
             isProgrammaticScroll = true
             scrollView.contentView.setBoundsOrigin(target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
-            DispatchQueue.main.async {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 isProgrammaticScroll = false
             }
         }
@@ -252,12 +359,12 @@ struct ChatView: View {
             guard docHeight > visibleHeight else { return }
             let inputBarOffset: CGFloat = 56
             let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
-            let overshoot = NSPoint(x: 0, y: target.y + 15)
+            let overshoot = NSPoint(x: 0, y: target.y + 35)
             isProgrammaticScroll = true
 
-            // Phase 1: Quick scroll to overshoot
+            // Phase 1: Quick scroll past the bottom
             NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.25
+                ctx.duration = 0.22
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 scrollView.contentView.animator().setBoundsOrigin(overshoot)
                 scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -345,9 +452,9 @@ struct WelcomeCard: View {
 
 struct UserMessageRow: View {
     let message: ChatMessage
+    var onImageTap: (([String], Int) -> Void)? = nil
     @Environment(\.theme) var theme
     @State private var appeared = false
-    @State private var showFullImage = false
 
     private var textContent: String {
         // Strip [Image: path] from display text
@@ -378,13 +485,17 @@ struct UserMessageRow: View {
                 // Image previews
                 if !imagePaths.isEmpty {
                     HStack(spacing: 6) {
-                        ForEach(imagePaths, id: \.self) { path in
+                        ForEach(Array(imagePaths.enumerated()), id: \.element) { index, path in
                             if let image = NSImage(contentsOfFile: path) {
                                 Image(nsImage: image)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .frame(maxWidth: 200, maxHeight: 150)
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .cursor(.pointingHand)
+                                    .onTapGesture {
+                                        onImageTap?(imagePaths, index)
+                                    }
                             }
                         }
                     }
@@ -416,9 +527,9 @@ struct UserMessageRow: View {
 struct AssistantMessageRow: View {
     let message: ChatMessage
     var isStreaming: Bool = false
+    var isLatestMessage: Bool = false
     @Environment(\.theme) var theme
     @State private var appeared = false
-    @State private var showThinking = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -426,10 +537,13 @@ struct AssistantMessageRow: View {
             HStack(spacing: 5) {
                 Circle().fill(theme.accent).frame(width: 6, height: 6)
                 Text("Claude").font(.caption2.bold()).foregroundStyle(theme.chromeText)
-                if let secs = message.durationSeconds {
+                if isStreaming {
                     Text("·").foregroundStyle(theme.mutedText)
-                    Image(systemName: "clock").font(.caption2).foregroundStyle(theme.timestampText)
-                    Text(formatDuration(secs)).font(.caption2).foregroundStyle(theme.timestampText)
+                    Image(systemName: "clock").font(.caption2).foregroundStyle(theme.accent)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(formatDuration(context.date.timeIntervalSince(message.timestamp)))
+                            .font(.caption2).foregroundStyle(theme.accent)
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -448,68 +562,16 @@ struct AssistantMessageRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 12)
                 } else {
-                    let textBlocks = message.blocks.filter { if case .text = $0.kind { return true }; return false }
-                    let hasThinking = textBlocks.count > 1 || message.blocks.contains { if case .toolUse = $0.kind { return true }; return false }
-
-                    // "Show thinking" toggle when there's intermediate content
-                    if hasThinking && !showThinking {
-                        // Show only the last text block (the final answer)
-                        if let lastText = textBlocks.last, case .text(let text) = lastText.kind {
+                    // Group blocks into: text (always visible) + tool chains (collapsible)
+                    let groups = groupBlocks(message.blocks)
+                    ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                        switch group {
+                        case .text(let text, _):
                             MarkdownText(text: text, isStreaming: isStreaming)
                                 .padding(.horizontal, 12)
-                        }
-
-                        // Expandable thinking toggle
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) { showThinking = true }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                Text("Show reasoning (\(message.blocks.count - (textBlocks.isEmpty ? 0 : 1)) steps)")
-                                    .font(.caption2)
-                            }
-                            .foregroundStyle(theme.mutedText)
-                            .padding(.horizontal, 12)
-                            .padding(.top, 4)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        // Show all blocks (expanded or simple response)
-                        if showThinking {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) { showThinking = false }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "chevron.down")
-                                        .font(.caption2)
-                                    Text("Hide reasoning")
-                                        .font(.caption2)
-                                }
-                                .foregroundStyle(theme.mutedText)
+                        case .tools(let blocks):
+                            CollapsibleToolGroup(blocks: blocks, message: message, isLatestMessage: isLatestMessage)
                                 .padding(.horizontal, 12)
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        ForEach(Array(message.blocks.enumerated()), id: \.element.id) { index, block in
-                            Group {
-                                switch block.kind {
-                                case .text(let text):
-                                    MarkdownText(text: text)
-                                case .toolUse(let name, _):
-                                    if name == "Write",
-                                       let path = block.toolInput["file_path"] as? String,
-                                       path.contains(".claude/plans/") {
-                                        PlanCard(input: block.toolInput)
-                                    } else {
-                                        ToolUseCard(name: name, input: block.toolInput)
-                                    }
-                                case .toolResult(let content):
-                                    ToolResultCard(content: content)
-                                }
-                            }
-                            .padding(.horizontal, 12)
                         }
                     }
                 }
@@ -520,7 +582,23 @@ struct AssistantMessageRow: View {
                         .padding(.horizontal, 12)
                 }
             }
-            .padding(.bottom, 10)
+
+            // Footer: duration + cost (shown after completion)
+            if !isStreaming, let secs = message.durationSeconds, secs > 0 {
+                HStack(spacing: 5) {
+                    let verb = message.completionVerb ?? "Baked"
+                    Text("\(verb) for \(formatDuration(secs))").font(.caption2)
+                    if let cost = message.costUsd, cost > 0 {
+                        Text("·")
+                        Text(formatCost(cost)).font(.caption2)
+                    }
+                }
+                .foregroundStyle(theme.mutedText)
+                .padding(.horizontal, 12)
+                .padding(.top, 2)
+            }
+
+            Spacer().frame(height: 10)
         }
         .background(theme.assistantBubble.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
@@ -536,11 +614,155 @@ struct AssistantMessageRow: View {
         }
     }
 
+    // MARK: - Block Grouping
+
+    private enum BlockGroup {
+        case text(String, id: String)
+        case tools([ContentBlock])
+    }
+
+    /// Group consecutive blocks: text blocks stay individual, consecutive tool use/result blocks merge.
+    private func groupBlocks(_ blocks: [ContentBlock]) -> [BlockGroup] {
+        var groups: [BlockGroup] = []
+        var currentTools: [ContentBlock] = []
+
+        func flushTools() {
+            if !currentTools.isEmpty {
+                groups.append(.tools(currentTools))
+                currentTools = []
+            }
+        }
+
+        for block in blocks {
+            switch block.kind {
+            case .text(let text):
+                flushTools()
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    groups.append(.text(text, id: block.id))
+                }
+            case .toolUse, .toolResult:
+                currentTools.append(block)
+            }
+        }
+        flushTools()
+        return groups
+    }
+
     private func formatDuration(_ seconds: Double) -> String {
         if seconds < 60 { return String(format: "%.0fs", seconds) }
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return "\(mins)m \(secs)s"
+    }
+
+    private func formatCost(_ cost: Double) -> String {
+        if cost < 0.01 { return String(format: "$%.4f", cost) }
+        if cost < 0.10 { return String(format: "$%.3f", cost) }
+        return String(format: "$%.2f", cost)
+    }
+}
+
+// MARK: - Collapsible Tool Group
+
+/// Groups consecutive tool use + result blocks. Shows individual cards when few, collapses into a summary when many.
+struct CollapsibleToolGroup: View {
+    let blocks: [ContentBlock]
+    let message: ChatMessage
+    let isLatestMessage: Bool
+    @Environment(\.theme) var theme
+    @State private var expanded: Bool
+
+    init(blocks: [ContentBlock], message: ChatMessage, isLatestMessage: Bool = false) {
+        self.blocks = blocks
+        self.message = message
+        self.isLatestMessage = isLatestMessage
+        let toolCount = blocks.filter { if case .toolUse = $0.kind { return true }; return false }.count
+        // Auto-collapse tools on older messages to reduce UI load
+        _expanded = State(initialValue: isLatestMessage && toolCount <= 4)
+    }
+
+    private var toolSummaryLabel: String {
+        var counts: [(String, Int)] = []
+        for block in blocks {
+            if case .toolUse(let name, _) = block.kind {
+                let display: String
+                switch name {
+                case "Grep", "Glob": display = "Search"
+                case "Bash": display = "Run"
+                case "WebFetch": display = "Fetch"
+                case "WebSearch": display = "Web"
+                case "Agent": display = "Agent"
+                default: display = name
+                }
+                if let idx = counts.firstIndex(where: { $0.0 == display }) {
+                    counts[idx].1 += 1
+                } else {
+                    counts.append((display, 1))
+                }
+            }
+        }
+        let parts = counts.map { $0.1 > 1 ? "\($0.0) \u{00d7}\($0.1)" : $0.0 }
+        return parts.joined(separator: ", ")
+    }
+
+    var body: some View {
+        if expanded {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(blocks.enumerated()), id: \.element.id) { _, block in
+                    switch block.kind {
+                    case .toolUse(let name, _):
+                        if name == "Write",
+                           let path = block.toolInput["file_path"] as? String,
+                           path.contains(".claude/plans/") {
+                            PlanCard(input: block.toolInput)
+                        } else if name == "ExitPlanMode" {
+                            let hasPlanFile = message.blocks.contains { b in
+                                if case .toolUse(let n, _) = b.kind,
+                                   n == "Write",
+                                   (b.toolInput["file_path"] as? String ?? "").contains(".claude/plans/") { return true }
+                                return false
+                            }
+                            if !hasPlanFile {
+                                PlanSummaryCard(blocks: message.blocks)
+                            }
+                        } else {
+                            ToolUseCard(name: name, input: block.toolInput)
+                        }
+                    case .toolResult(let content):
+                        ToolResultCard(content: content)
+                    default:
+                        EmptyView()
+                    }
+                }
+
+                // Collapse button when there are many tools
+                let toolCount = blocks.filter { if case .toolUse = $0.kind { return true }; return false }.count
+                if toolCount > 4 {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.up").font(.caption2)
+                            Text("Collapse tools").font(.caption2)
+                        }
+                        .foregroundStyle(theme.mutedText)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else {
+            // Collapsed: single-line summary
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded = true }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right").font(.caption2)
+                    Text(toolSummaryLabel).font(.caption2)
+                }
+                .foregroundStyle(theme.mutedText)
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 
@@ -580,12 +802,30 @@ struct MarkdownText: View {
                             .stroke(theme.toolCardBorder, lineWidth: 1)
                     )
                 } else {
-                    Text(renderInline(part.text))
-                        .foregroundStyle(theme.assistantText)
-                        .textSelection(.enabled)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    let blocks = splitMarkdownBlocks(part.text)
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                        switch block {
+                        case .heading(let level, let content):
+                            Text(renderInline(content))
+                                .font(.system(size: level == 1 ? 17 : level == 2 ? 15 : 14, weight: .bold, design: .monospaced))
+                                .foregroundStyle(theme.assistantText)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        case .divider:
+                            Rectangle()
+                                .fill(theme.mutedText.opacity(0.2))
+                                .frame(height: 1)
+                                .padding(.vertical, 4)
+                        case .paragraph(let content):
+                            Text(renderInline(content))
+                                .foregroundStyle(theme.assistantText)
+                                .textSelection(.enabled)
+                                .lineLimit(nil)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
             }
         }
@@ -606,7 +846,7 @@ struct MarkdownText: View {
         if var result = try? AttributedString(markdown: escaped, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
             // Verify the parser didn't silently drop content
             let renderedCount = result.characters.count
-            let expectedMin = text.count * 2 / 3  // allow some shrinkage from syntax removal
+            let expectedMin = text.count / 3  // allow shrinkage from markdown syntax removal
             if renderedCount >= expectedMin {
                 for run in result.runs {
                     let isBold = result[run.range].inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false
@@ -633,6 +873,45 @@ struct MarkdownText: View {
         let text: String
         let isCode: Bool
         let language: String
+    }
+
+    private enum MarkdownBlock {
+        case heading(level: Int, text: String)
+        case divider
+        case paragraph(String)
+    }
+
+    private func splitMarkdownBlocks(_ text: String) -> [MarkdownBlock] {
+        var blocks: [MarkdownBlock] = []
+        var currentLines: [String] = []
+
+        func flushParagraph() {
+            let para = currentLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !para.isEmpty { blocks.append(.paragraph(para)) }
+            currentLines = []
+        }
+
+        for line in text.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Heading: # through ###
+            if let match = trimmed.range(of: "^#{1,3}\\s+", options: .regularExpression) {
+                flushParagraph()
+                let level = trimmed.prefix(while: { $0 == "#" }).count
+                blocks.append(.heading(level: level, text: String(trimmed[match.upperBound...])))
+            }
+            // Divider: --- or *** or ___ (3+ of same char)
+            else if trimmed.count >= 3 &&
+                    (trimmed.allSatisfy({ $0 == "-" }) || trimmed.allSatisfy({ $0 == "*" }) || trimmed.allSatisfy({ $0 == "_" })) {
+                flushParagraph()
+                blocks.append(.divider)
+            }
+            else {
+                currentLines.append(line)
+            }
+        }
+        flushParagraph()
+        return blocks
     }
 
     private func splitCodeBlocks(_ text: String) -> [TextPart] {
@@ -875,6 +1154,91 @@ struct ToolResultCard: View {
     }
 }
 
+// MARK: - Plan Summary Card (shown for ExitPlanMode)
+
+struct PlanSummaryCard: View {
+    let blocks: [ContentBlock]
+    @Environment(\.theme) var theme
+    @State private var expanded = false
+
+    /// Extract headers and bullet points from all text blocks as a plan summary
+    private var summary: [String] {
+        let allText = blocks.compactMap { block -> String? in
+            if case .text(let text) = block.kind { return text }
+            return nil
+        }.joined(separator: "\n")
+
+        return allText.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { line in
+                line.hasPrefix("#") || line.hasPrefix("- ") || line.hasPrefix("* ") ||
+                line.hasPrefix("1.") || line.hasPrefix("2.") || line.hasPrefix("3.") ||
+                line.hasPrefix("4.") || line.hasPrefix("5.") || line.hasPrefix("6.") ||
+                line.hasPrefix("7.") || line.hasPrefix("8.") || line.hasPrefix("9.")
+            }
+            .prefix(15)
+            .map { String($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(theme.successDot)
+                Text("Plan Summary")
+                    .font(.system(.caption, design: .monospaced).bold())
+                    .foregroundStyle(theme.successDot)
+                Spacer()
+                if !summary.isEmpty {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(theme.mutedText)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+            }
+
+            if summary.isEmpty {
+                Text("Plan ready to execute")
+                    .font(theme.monoCaptionFont)
+                    .foregroundStyle(theme.mutedText)
+            } else {
+                // Always show first few lines
+                let visible = expanded ? summary : Array(summary.prefix(5))
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(visible.enumerated()), id: \.offset) { _, line in
+                        let trimmed = line.trimmingCharacters(in: .whitespaces)
+                        if trimmed.hasPrefix("#") {
+                            Text(trimmed.replacingOccurrences(of: "^#+\\s*", with: "", options: .regularExpression))
+                                .font(.system(.caption, design: .monospaced).bold())
+                                .foregroundStyle(theme.assistantText)
+                        } else {
+                            Text(trimmed)
+                                .font(theme.monoCaptionFont)
+                                .foregroundStyle(theme.assistantText.opacity(0.85))
+                        }
+                    }
+                    if !expanded && summary.count > 5 {
+                        Text("+ \(summary.count - 5) more steps...")
+                            .font(theme.monoCaptionFont)
+                            .foregroundStyle(theme.mutedText)
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(theme.toolCardBg)
+        .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4)))
+        .overlay(
+            RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4))
+                .stroke(theme.successDot.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
 // MARK: - Plan Card
 
 struct PlanCard: View {
@@ -899,15 +1263,10 @@ struct PlanCard: View {
         return (try? String(contentsOfFile: filePath, encoding: .utf8)) ?? ""
     }
 
-    /// Extract headers and top-level bullets as summary
-    private var summary: [String] {
+    /// Non-empty content lines for summary
+    private var contentLines: [String] {
         planContent.components(separatedBy: "\n")
-            .filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                return trimmed.hasPrefix("#") || trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ")
-            }
-            .prefix(12)
-            .map { String($0) }
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
     var body: some View {
@@ -930,33 +1289,33 @@ struct PlanCard: View {
                 withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
             }
 
-            // Summary (always visible)
+            // Plan content rendered as markdown
+            let visibleLines = expanded ? contentLines : Array(contentLines.prefix(12))
             VStack(alignment: .leading, spacing: 3) {
-                ForEach(Array(summary.enumerated()), id: \.offset) { _, line in
+                ForEach(Array(visibleLines.enumerated()), id: \.offset) { _, line in
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     if trimmed.hasPrefix("#") {
                         Text(trimmed.replacingOccurrences(of: "^#+\\s*", with: "", options: .regularExpression))
                             .font(.system(.caption, design: .monospaced).bold())
                             .foregroundStyle(theme.assistantText)
+                            .padding(.top, 4)
                     } else {
-                        Text(trimmed)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(theme.assistantText.opacity(0.8))
+                        Text(renderPlanLine(trimmed))
+                            .font(theme.monoCaptionFont)
+                            .foregroundStyle(theme.assistantText.opacity(0.85))
                     }
                 }
             }
 
-            // Full content (expanded)
-            if expanded {
-                Divider()
-                ScrollView {
-                    Text(planContent)
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundStyle(theme.assistantText)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            if !expanded && contentLines.count > 12 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { expanded = true }
+                } label: {
+                    Text("Show \(contentLines.count - 12) more lines...")
+                        .font(theme.monoCaptionFont)
+                        .foregroundStyle(theme.accent)
                 }
-                .frame(maxHeight: 300)
+                .buttonStyle(.plain)
             }
         }
         .padding(10)
@@ -966,6 +1325,21 @@ struct PlanCard: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(theme.accent.opacity(0.2), lineWidth: 1)
         )
+    }
+
+    private func renderPlanLine(_ text: String) -> AttributedString {
+        let baseFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        if let result = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            var styled = result
+            for run in styled.runs {
+                let isBold = styled[run.range].inlinePresentationIntent?.contains(.stronglyEmphasized) ?? false
+                styled[run.range].font = isBold ? NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask) : baseFont
+            }
+            return styled
+        }
+        var plain = AttributedString(text)
+        plain.font = baseFont
+        return plain
     }
 }
 
@@ -989,7 +1363,7 @@ struct ExecutePlanButton: View {
                     Text("Execute Plan")
                         .font(.system(.caption, weight: .semibold))
                 }
-                .foregroundStyle(theme.assistantBubble)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(theme.accent)
@@ -1006,10 +1380,10 @@ struct ExecutePlanButton: View {
                     Text("Reject")
                         .font(.system(.caption, weight: .medium))
                 }
-                .foregroundStyle(theme.mutedText)
+                .foregroundStyle(theme.chromeText)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(theme.assistantBubble.opacity(0.5))
+                .background(theme.chromeBar.opacity(0.6))
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(theme.chromeBorder, lineWidth: 0.5))
             }
@@ -1047,15 +1421,30 @@ struct ThinkingPetIndicator: View {
             PetView(session: session)
                 .shadow(color: .black.opacity(0.3), radius: 3, y: 2)
                 .transition(.scale(scale: 0.3).combined(with: .opacity))
-            Text(text)
-                .font(theme.monoCaptionFont)
-                .foregroundStyle(theme.assistantText)
-                .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-                .lineLimit(1)
-                .truncationMode(.middle)
+
+            if let endTime = session.sleepEndTime, endTime > Date() {
+                // Live countdown for sleep commands
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let remaining = max(0, Int(endTime.timeIntervalSince(context.date)))
+                    Text("Sleeping... \(remaining)s")
+                        .font(theme.monoCaptionFont)
+                        .foregroundStyle(theme.accent)
+                        .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                }
+            } else {
+                Text(text)
+                    .font(theme.monoCaptionFont)
+                    .foregroundStyle(theme.assistantText)
+                    .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .contentTransition(.interpolate)
+                    .animation(.easeInOut(duration: 0.25), value: text)
+            }
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .modifier(LiquidGlassChrome(cornerRadius: 12))
+        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: text)
     }
 }
 

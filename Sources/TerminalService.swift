@@ -9,6 +9,11 @@ import UserNotifications
 class TerminalService {
     static let shared = TerminalService()
 
+    /// Track active summary processes per session so we can cancel stale ones
+    private var activeSummaryProcesses: [UUID: Process] = [:]
+    /// Debounce timers for context summary updates
+    private var summaryDebounceTimers: [UUID: DispatchWorkItem] = [:]
+
     /// Resolved full path to the claude binary (cached after first lookup)
     private lazy var resolvedClaudePath: String = {
         let configured = AppSettings.shared.claudeCodePath
@@ -95,7 +100,7 @@ class TerminalService {
         DispatchQueue.main.async {
             session.chatMessages.append(userMsg)
             session.status = .running
-            session.assistantState = .thinking("Thinking...")
+            session.assistantState = .thinking(Self.randomSpinnerVerb())
             session.suggestedActions = []
         }
 
@@ -112,12 +117,16 @@ class TerminalService {
             args.append("--dangerously-skip-permissions")
         }
 
-        // Resume existing conversation or start new
-        if let sessionId = session.claudeSessionId {
-            args += ["--resume", sessionId]
+        // Context mode: managed (build context ourselves) vs resume (send full history)
+        if settings.managedContext {
+            let contextPrompt = buildManagedPrompt(message: promptText, session: session)
+            args.append(contextPrompt)
+        } else {
+            if let sessionId = session.claudeSessionId {
+                args += ["--resume", sessionId]
+            }
+            args.append(promptText)
         }
-
-        args.append(promptText)
 
         let workDir = (session.workingDirectory as NSString).expandingTildeInPath
 
@@ -135,7 +144,8 @@ class TerminalService {
         let process = Process()
         let pipe = Pipe()
         let errorPipe = Pipe()
-        let escapedText = promptText.replacingOccurrences(of: "'", with: "'\\''")
+        let actualPrompt = args.last ?? promptText
+        let escapedText = actualPrompt.replacingOccurrences(of: "'", with: "'\\''")
         let claudeCmd = ([resolvedClaudePath] + args.dropLast()).joined(separator: " ")
         let fullCmd = "cd '\(workDir)' && \(claudeCmd) '\(escapedText)'"
 
@@ -255,9 +265,28 @@ class TerminalService {
                                 }()
                                 let toolCommand = input["command"] as? String
                                 DispatchQueue.main.async {
-                                    session.assistantState = .thinking(label)
                                     session.lastToolName = name
                                     session.lastToolCommand = toolCommand
+                                    // Detect sleep commands and set countdown
+                                    if name == "Bash", let cmd = toolCommand {
+                                        if let match = cmd.range(of: "sleep\\s+(\\d+)", options: .regularExpression) {
+                                            let numRange = cmd[match].split(separator: " ").last.flatMap { Int($0) }
+                                            if let secs = numRange {
+                                                session.sleepEndTime = Date().addingTimeInterval(Double(secs))
+                                            }
+                                        } else {
+                                            session.sleepEndTime = nil
+                                        }
+                                    } else {
+                                        session.sleepEndTime = nil
+                                    }
+                                    if name == "AskUserQuestion" {
+                                        let question = input["question"] as? String ?? "Waiting for your input..."
+                                        session.assistantState = .thinking(question)
+                                        session.status = .waitingForInput
+                                    } else {
+                                        session.assistantState = .thinking(label)
+                                    }
                                 }
 
                             default: break
@@ -439,8 +468,12 @@ class TerminalService {
             if let last = session.chatMessages.indices.last,
                session.chatMessages[last].role == .assistant {
                 session.chatMessages[last].durationSeconds = duration
+                if session.chatMessages[last].completionVerb == nil {
+                    session.chatMessages[last].completionVerb = Self.randomCompletionVerb()
+                }
                 session.chatMessages[last].durationApiMs = resultDuration
                 session.chatMessages[last].costUsd = resultCost
+                if let cost = resultCost { session.totalCostUsd += cost }
             } else if process.terminationStatus != 0 && !stderrText.isEmpty {
                 let err = ChatMessage(role: .assistant, content: "Error: \(stderrText)")
                 session.chatMessages.append(err)
@@ -448,6 +481,12 @@ class TerminalService {
 
             session.status = .waitingForInput
             session.assistantState = .idle
+            if session.planMode { session.planResponseReceived = true }
+
+            // Update context summary (Haiku) if managed context is on
+            if AppSettings.shared.managedContext {
+                self.updateContextSummary(for: session)
+            }
 
             // Generate smart suggestions for next action
             self.generateSuggestions(for: session)
@@ -476,6 +515,273 @@ class TerminalService {
             if !session.messageQueue.isEmpty {
                 self.processNextInQueue(for: session)
             }
+        }
+    }
+
+    // MARK: - Spinner Verbs
+
+    private static let spinnerVerbs = [
+        "Accomplishing", "Actioning", "Actualizing", "Architecting",
+        "Baking", "Beaming", "Beboppin'", "Befuddling", "Billowing", "Blanching",
+        "Bloviating", "Boogieing", "Boondoggling", "Booping", "Bootstrapping",
+        "Brewing", "Burrowing",
+        "Calculating", "Canoodling", "Caramelizing", "Cascading", "Catapulting",
+        "Cerebrating", "Channeling", "Choreographing", "Churning", "Clauding",
+        "Coalescing", "Cogitating", "Combobulating", "Composing", "Computing",
+        "Concocting", "Conjuring", "Considering", "Contemplating", "Cooking",
+        "Crafting", "Creating", "Crunching", "Crystallizing", "Cultivating",
+        "Deciphering", "Deliberating", "Determining", "Dilly-dallying",
+        "Discombobulating", "Doodling", "Drizzling",
+        "Ebbing", "Effecting", "Elucidating", "Embellishing", "Enchanting",
+        "Envisioning", "Evaporating",
+        "Fermenting", "Fiddle-faddling", "Finagling", "Flambeing",
+        "Flibbertigibbeting", "Flowing", "Flummoxing", "Fluttering",
+        "Forging", "Forming", "Frolicking", "Frosting",
+        "Gallivanting", "Galloping", "Garnishing", "Generating", "Germinating",
+        "Grooving", "Gusting",
+        "Harmonizing", "Hashing", "Hatching", "Herding", "Hullaballooing",
+        "Osmosing", "Perambulating", "Percolating", "Perusing", "Philosophising",
+        "Photosynthesizing", "Pollinating", "Pondering", "Pontificating",
+        "Precipitating", "Prestidigitating", "Processing", "Proofing",
+        "Propagating", "Puttering", "Puzzling", "Quantumizing",
+        "Razzle-dazzling", "Razzmatazzing", "Recombobulating", "Reticulating",
+        "Roosting", "Ruminating",
+        "Sauteing", "Scampering", "Schlepping", "Scurrying", "Seasoning",
+        "Shenaniganing", "Shimmying", "Simmering", "Skedaddling", "Sketching",
+        "Slithering", "Smooshing", "Sock-hopping", "Spelunking", "Spinning",
+        "Sprouting", "Stewing", "Sublimating", "Swirling", "Swooping",
+        "Symbioting", "Synthesizing",
+        "Tempering", "Thinking", "Thundering", "Tinkering", "Tomfoolering",
+        "Topsy-turvying", "Transfiguring", "Transmuting", "Twisting",
+        "Undulating", "Unfurling", "Unravelling",
+        "Vibing", "Waddling", "Wandering", "Warping", "Whatchamacalliting",
+        "Whirlpooling", "Whirring", "Whisking", "Wibbling", "Working", "Wrangling",
+        // ClaudeStation specials
+        "Queueing", "Destacking", "Petting the buddy", "Feeding tokens",
+        "Multiplexing", "Tab-juggling",
+    ]
+
+    private static let completionVerbs = [
+        "Baked", "Brewed", "Churned", "Cooked", "Crafted", "Conjured",
+        "Forged", "Hatched", "Simmered", "Synthesized", "Whipped up",
+        "Concocted", "Crystallized", "Cultivated", "Garnished",
+    ]
+
+    static func randomSpinnerVerb() -> String {
+        (spinnerVerbs.randomElement() ?? "Thinking") + "..."
+    }
+
+    static func randomCompletionVerb() -> String {
+        completionVerbs.randomElement() ?? "Baked"
+    }
+
+    // MARK: - Managed Context
+
+    /// Build a prompt that includes session context + recent exchanges instead of using --resume.
+    /// This keeps token usage roughly constant regardless of conversation length.
+    private func buildManagedPrompt(message: String, session: Session) -> String {
+        let hasHistory = !session.chatMessages.isEmpty
+        if !hasHistory && session.contextSummary.isEmpty {
+            return message
+        }
+
+        var parts: [String] = []
+
+        if !session.contextSummary.isEmpty {
+            parts.append("<session-context>\n\(session.contextSummary)\n</session-context>")
+        }
+
+        // Include last 3 exchanges (up to 6 messages) for immediate detail
+        let recentCount = min(session.chatMessages.count, 6)
+        if recentCount > 0 {
+            let recent = session.chatMessages.suffix(recentCount)
+            var lines: [String] = []
+            for msg in recent {
+                if msg.role == .user {
+                    lines.append("User: \(String(msg.content.prefix(500)))")
+                } else if msg.role == .assistant {
+                    var toolLines: [String] = []
+                    var textContent = ""
+                    for block in msg.blocks {
+                        switch block.kind {
+                        case .text(let t):
+                            if textContent.isEmpty { textContent = t }
+                        case .toolUse(let name, let inputJson):
+                            if let data = inputJson.data(using: .utf8),
+                               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                                switch name {
+                                case "Bash": toolLines.append("Ran: \(String((dict["command"] as? String ?? "").prefix(100)))")
+                                case "Edit": toolLines.append("Edited \((dict["file_path"] as? String ?? "").components(separatedBy: "/").last ?? "")")
+                                case "Write": toolLines.append("Wrote \((dict["file_path"] as? String ?? "").components(separatedBy: "/").last ?? "")")
+                                case "Read": toolLines.append("Read \((dict["file_path"] as? String ?? "").components(separatedBy: "/").last ?? "")")
+                                case "Grep", "Glob": toolLines.append("Searched: \(dict["pattern"] as? String ?? "")")
+                                default: toolLines.append(name)
+                                }
+                            }
+                        default: break
+                        }
+                    }
+                    var summary = "Assistant: \(String(textContent.prefix(1500)))"
+                    if !toolLines.isEmpty {
+                        summary += "\n  [Actions: \(toolLines.joined(separator: "; "))]"
+                    }
+                    lines.append(summary)
+                }
+            }
+            parts.append("<recent-exchange>\n\(lines.joined(separator: "\n"))\n</recent-exchange>")
+        }
+
+        parts.append(message)
+        return parts.joined(separator: "\n\n")
+    }
+
+    /// Update the session's running context summary using Haiku (cheap & fast).
+    /// Called after each exchange completes. Debounced to avoid spam when exchanges finish quickly.
+    private func updateContextSummary(for session: Session) {
+        let sessionId = session.id
+
+        // Cancel any pending debounce for this session
+        summaryDebounceTimers[sessionId]?.cancel()
+
+        // Debounce: wait 2s before firing, in case another exchange finishes right after
+        let work = DispatchWorkItem { [weak self] in
+            self?.runContextSummaryUpdate(for: session)
+        }
+        summaryDebounceTimers[sessionId] = work
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0, execute: work)
+    }
+
+    private func runContextSummaryUpdate(for session: Session) {
+        let messages = session.chatMessages
+        guard messages.count >= 2 else { return }
+
+        let lastAssistant = messages.last { $0.role == .assistant }
+        let lastUser = messages.last { $0.role == .user }
+        guard let userMsg = lastUser, let assistantMsg = lastAssistant else { return }
+
+        // Kill any still-running summary process for this session
+        let sessionId = session.id
+        if let existing = activeSummaryProcesses[sessionId], existing.isRunning {
+            existing.terminate()
+        }
+
+        // Build concise tool summary
+        var toolSummaries: [String] = []
+        for block in assistantMsg.blocks {
+            if case .toolUse(let name, let inputJson) = block.kind {
+                if let data = inputJson.data(using: .utf8),
+                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    switch name {
+                    case "Bash": toolSummaries.append("Ran: \(String((dict["command"] as? String ?? "").prefix(80)))")
+                    case "Edit": toolSummaries.append("Edited \(dict["file_path"] as? String ?? "")")
+                    case "Write": toolSummaries.append("Wrote \(dict["file_path"] as? String ?? "")")
+                    case "Read": toolSummaries.append("Read \(dict["file_path"] as? String ?? "")")
+                    case "Grep", "Glob": toolSummaries.append("Searched: \(dict["pattern"] as? String ?? "")")
+                    default: toolSummaries.append(name)
+                    }
+                }
+            }
+        }
+
+        let currentSummary = session.contextSummary.isEmpty ? "(beginning of session)" : session.contextSummary
+        let toolStr = toolSummaries.isEmpty ? "" : "\nTools: \(toolSummaries.joined(separator: ", "))"
+        let prompt = """
+        Update this running summary of a coding session. Be concise (under 400 words). Include: files modified, decisions made, current task state, errors if any.
+
+        Current summary:
+        \(currentSummary)
+
+        Latest exchange:
+        User: \(String(userMsg.content.prefix(500)))
+        Assistant: \(String(assistantMsg.content.prefix(1000)))\(toolStr)
+
+        Return ONLY the updated summary.
+        """
+
+        let claudePath = resolvedClaudePath
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-l", "-c", "\(claudePath) -p --model haiku --output-format text '\(prompt.replacingOccurrences(of: "'", with: "'\\''"))'"]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            process.environment = ProcessInfo.processInfo.environment
+
+            self?.activeSummaryProcesses[sessionId] = process
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+
+                // Clean up tracking
+                DispatchQueue.main.async { self?.activeSummaryProcesses.removeValue(forKey: sessionId) }
+
+                // Ignore results if process was terminated (cancelled)
+                guard process.terminationReason == .exit, process.terminationStatus == 0 else { return }
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty else { return }
+                DispatchQueue.main.async {
+                    session.contextSummary = text
+                    NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
+                }
+            } catch {
+                DispatchQueue.main.async { self?.activeSummaryProcesses.removeValue(forKey: sessionId) }
+            }
+        }
+    }
+
+    /// Generate an initial context summary from existing chat history (for sessions that predate managed context).
+    func bootstrapContextSummary(for session: Session) {
+        let messages = session.chatMessages
+        guard messages.count >= 2 else { return }
+
+        // Build a condensed view of the conversation
+        var exchangeLines: [String] = []
+        for msg in messages.suffix(20) { // last 20 messages max
+            if msg.role == .user {
+                exchangeLines.append("User: \(String(msg.content.prefix(200)))")
+            } else if msg.role == .assistant {
+                var toolNames: [String] = []
+                for block in msg.blocks {
+                    if case .toolUse(let name, _) = block.kind { toolNames.append(name) }
+                }
+                let tools = toolNames.isEmpty ? "" : " [Tools: \(toolNames.joined(separator: ", "))]"
+                exchangeLines.append("Assistant: \(String(msg.content.prefix(300)))\(tools)")
+            }
+        }
+
+        let prompt = """
+        Summarize this coding session conversation. Be concise (under 400 words). Include: files modified, decisions made, current task state, key context.
+
+        \(exchangeLines.joined(separator: "\n"))
+
+        Return ONLY the summary.
+        """
+
+        let claudePath = resolvedClaudePath
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-l", "-c", "\(claudePath) -p --model haiku --output-format text '\(prompt.replacingOccurrences(of: "'", with: "'\\''"))'"]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            process.environment = ProcessInfo.processInfo.environment
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty else { return }
+                DispatchQueue.main.async {
+                    session.contextSummary = text
+                    NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
+                }
+            } catch {}
         }
     }
 

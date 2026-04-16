@@ -4,6 +4,8 @@ import AppKit
 
 /// Checks if a newer local build exists by comparing modification times
 class UpdateChecker: ObservableObject {
+    static let shared = UpdateChecker()
+
     @Published var updateAvailable = false
 
     private var timer: Timer?
@@ -23,10 +25,11 @@ class UpdateChecker: ObservableObject {
         return candidates.first { FileManager.default.fileExists(atPath: $0) } ?? candidates[0]
     }()
 
-    private var runningBinaryModTime: Date? {
+    /// Snapshot of the running binary's mod time, captured at launch
+    private let launchBinaryModTime: Date? = {
         guard let path = Bundle.main.executablePath else { return nil }
-        return modTime(of: path)
-    }
+        return try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date
+    }()
 
     init() {
         startChecking()
@@ -40,11 +43,11 @@ class UpdateChecker: ObservableObject {
     }
 
     private func check() {
-        guard let runningTime = runningBinaryModTime,
-              let buildTime = modTime(of: buildBinaryPath) else {
+        guard let launchTime = launchBinaryModTime,
+              let installedTime = modTime(of: "/Applications/ClaudeStation.app/Contents/MacOS/ClaudeStation") else {
             return
         }
-        let available = buildTime > runningTime
+        let available = installedTime > launchTime
         if available != updateAvailable {
             DispatchQueue.main.async {
                 self.updateAvailable = available
