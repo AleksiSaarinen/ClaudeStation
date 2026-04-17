@@ -360,7 +360,6 @@ struct UsageToolbarView: View {
             }
             .opacity(isStale ? 0.5 : 1.0)
             .padding(.leading, 8)
-            .onAppear { usageMonitor.startMonitoring(interval: 120) }
             .onTapGesture {
                 if isStale {
                     usageMonitor.openUsageInBrowser()
@@ -674,6 +673,33 @@ struct InputBar: View {
 
                 // Right side buttons
                 HStack(spacing: 6) {
+                    // Effort level cycle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            let levels = ["low", "medium", "high", "max"]
+                            let idx = levels.firstIndex(of: session.effortLevel) ?? 3
+                            session.effortLevel = levels[(idx + 1) % levels.count]
+                        }
+                    } label: {
+                        let short: String = {
+                            switch session.effortLevel {
+                            case "low": return "Lo"
+                            case "medium": return "Med"
+                            case "high": return "Hi"
+                            default: return "Max"
+                            }
+                        }()
+                        Text(short)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(session.effortLevel == "max" ? .white : theme.chromeText)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(session.effortLevel == "max" ? theme.accent : theme.chromeText.opacity(0.25))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Effort: \(session.effortLevel) — click to cycle")
+
                     // Plan mode toggle
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) {

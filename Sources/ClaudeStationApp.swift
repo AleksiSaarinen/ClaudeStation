@@ -47,7 +47,10 @@ struct ClaudeStationApp: App {
             let activeTheme = Theme.byId(selectedThemeId).withFonts(mono: customMonoFont.isEmpty ? nil : customMonoFont, ui: nil)
             ContentView()
                 .environmentObject(sessionManager)
-                .onAppear { appDelegate.sessionManager = sessionManager }
+                .onAppear {
+                    appDelegate.sessionManager = sessionManager
+                    UsageMonitor.shared.startMonitoring(interval: 120)
+                }
                 .environment(\.theme, activeTheme)
                 .id(selectedThemeId + customMonoFont)
                 .frame(minWidth: 350, minHeight: 300)

@@ -50,6 +50,32 @@ class TerminalService {
     func send(text: String, to session: Session, force: Bool = false) {
         guard !text.isEmpty else { return }
 
+        // Handle local slash commands
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed == "/clear" {
+            DispatchQueue.main.async {
+                session.claudeSessionId = nil
+                session.lastContextSize = 0
+                session.totalInputTokens = 0
+                session.totalOutputTokens = 0
+                let sysMsg = ChatMessage(role: .system, content: "Context cleared — next message starts a fresh session.")
+                session.chatMessages.append(sysMsg)
+                session.suggestedActions = []
+            }
+            return
+        }
+        if trimmed.hasPrefix("/effort") {
+            let parts = trimmed.split(separator: " ")
+            if parts.count >= 2, ["low", "medium", "high", "xhigh", "max"].contains(String(parts[1])) {
+                DispatchQueue.main.async {
+                    session.effortLevel = String(parts[1])
+                    let sysMsg = ChatMessage(role: .system, content: "Effort set to \(parts[1]).")
+                    session.chatMessages.append(sysMsg)
+                }
+                return
+            }
+        }
+
         // Prevent concurrent processes — queue if busy
         if session.activeProcess != nil {
             if force {
@@ -108,7 +134,7 @@ class TerminalService {
 
         // Build claude command
         let settings = AppSettings.shared
-        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "claude-opus-4-7"]
+        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "claude-opus-4-7", "--effort", session.effortLevel]
 
         // Plan mode takes precedence over bypass permissions
         if session.planMode {
@@ -400,6 +426,11 @@ class TerminalService {
                     if let usage = json["usage"] as? [String: Any] {
                         resultInputTokens = usage["input_tokens"] as? Int
                         resultOutputTokens = usage["output_tokens"] as? Int
+                        let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+                        let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
+                        let input = usage["input_tokens"] as? Int ?? 0
+                        let contextSize = input + cacheRead + cacheCreate
+                        DispatchQueue.main.async { session.lastContextSize = contextSize }
                     }
                     if let sid = json["session_id"] as? String {
                         DispatchQueue.main.async { session.claudeSessionId = sid }
@@ -508,6 +539,9 @@ class TerminalService {
 
             // Generate smart suggestions for next action
             self.generateSuggestions(for: session)
+
+            // Inject context management suggestions when relevant
+            self.injectContextSuggestions(for: session)
 
             // Trigger save after response completes
             NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
@@ -800,6 +834,36 @@ class TerminalService {
                     NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
                 }
             } catch {}
+        }
+    }
+
+    // MARK: - Context Management Suggestions
+
+    private func injectContextSuggestions(for session: Session) {
+        let ctxSize = session.lastContextSize
+        let ctxPct = ctxSize > 0 ? ctxSize * 100 / 1_000_000 : 0
+        let lastContent = (session.chatMessages.last?.content ?? "").lowercased()
+
+        let taskDone = lastContent.contains("pushed") || lastContent.contains("done")
+            || lastContent.contains("complete") || lastContent.contains("finished")
+            || lastContent.contains("all set") || lastContent.contains("you're good")
+
+        // Wait a bit for AI suggestions to arrive first, then append
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            if ctxPct >= 40 {
+                session.suggestedActions.append((
+                    icon: "arrow.triangle.2.circlepath",
+                    label: "Compact context (\(ctxPct)%)",
+                    prompt: "/compact"
+                ))
+            }
+            if taskDone && ctxPct >= 15 {
+                session.suggestedActions.append((
+                    icon: "arrow.counterclockwise",
+                    label: "Clear & start fresh",
+                    prompt: "/clear"
+                ))
+            }
         }
     }
 

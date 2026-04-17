@@ -37,6 +37,7 @@ class Session: ObservableObject, Identifiable {
     @Published var isProcessingQueue: Bool = false
     @Published var chatMessages: [ChatMessage] = []
     @Published var assistantState: AssistantState = .idle
+    @Published var effortLevel: String = "max"  // low, medium, high, xhigh, max
     @Published var planMode: Bool = false
     @Published var planResponseReceived: Bool = false
     @Published var lastToolName: String?
@@ -47,6 +48,7 @@ class Session: ObservableObject, Identifiable {
     @Published var totalCostUsd: Double = 0
     @Published var totalInputTokens: Int = 0
     @Published var totalOutputTokens: Int = 0
+    @Published var lastContextSize: Int = 0  // input + cache tokens from last message = current context window usage
     @Published var rateLimitResetsAt: Date?
     @Published var rateLimitType: String?  // "five_hour", "weekly", etc.
     @Published var celebrating: Bool = false

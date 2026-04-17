@@ -45,7 +45,7 @@ class AppSettings: ObservableObject {
         self.alwaysBypassPermissions = defaults.object(forKey: "alwaysBypassPermissions") as? Bool ?? true
         self.autoProcessQueue = defaults.object(forKey: "autoProcessQueue") as? Bool ?? true
         self.maxOutputBufferLines = defaults.object(forKey: "maxOutputBufferLines") as? Int ?? 10000
-        self.managedContext = defaults.object(forKey: "managedContext") as? Bool ?? true
+        self.managedContext = defaults.object(forKey: "managedContext") as? Bool ?? false
         loadProfiles()
     }
 

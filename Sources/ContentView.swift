@@ -334,6 +334,19 @@ struct SessionTab: View {
                     .clipShape(Capsule())
             }
 
+            // Context size badge (% of 1M window)
+            if session.lastContextSize > 0 {
+                let ctxPct = min(99, session.lastContextSize * 100 / 1_000_000)
+                Text("ctx \(ctxPct)%")
+                    .font(.system(size: 7, weight: .medium, design: .monospaced))
+                    .foregroundStyle(ctxPct > 60 ? .orange : theme.mutedText)
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background((ctxPct > 60 ? Color.orange : theme.mutedText).opacity(0.1))
+                    .clipShape(Capsule())
+                    .help("Context: \(session.lastContextSize / 1000)k / 1M tokens")
+            }
+
             // Close button — visible on hover or when active, with hover highlight
             if hovering || isActive {
                 Button {

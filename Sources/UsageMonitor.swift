@@ -43,6 +43,26 @@ class UsageMonitor: NSObject, ObservableObject {
 
     private func fetchUsageFromChrome() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            // First, reload the Chrome tab to get fresh data
+            let reloadScript = """
+            tell application "Google Chrome"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if URL of t contains "claude.ai/settings" then
+                            tell t to reload
+                            exit repeat
+                        end if
+                    end repeat
+                end repeat
+            end tell
+            """
+            let reloadAS = NSAppleScript(source: reloadScript)
+            var reloadErr: NSDictionary?
+            reloadAS?.executeAndReturnError(&reloadErr)
+
+            // Wait for page to load
+            Thread.sleep(forTimeInterval: 3.0)
+
             let script = """
             tell application "Google Chrome"
                 set resultText to ""
