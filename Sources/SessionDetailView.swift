@@ -55,23 +55,7 @@ struct SessionDetailView: View {
                                     pasteboardWatcher.removeImage(at: index)
                                 }
                             },
-                            onSend: {
-                                let hasPendingImages = !pasteboardWatcher.pendingImagePaths.isEmpty
-                                guard !inputText.isEmpty || hasPendingImages else { return }
-                                var message = inputText
-                                // Append all pending image paths
-                                for path in pasteboardWatcher.pendingImagePaths {
-                                    let sep = message.isEmpty ? "" : "\n"
-                                    message += "\(sep)[Image: \(path)]"
-                                }
-                                pasteboardWatcher.clearForSend()
-                                if session.status == .waitingForInput || session.status == .idle {
-                                    sessionManager.sendImmediately(message, to: session)
-                                } else {
-                                    sessionManager.queueMessage(message, for: session)
-                                }
-                                inputText = ""
-                            },
+                            onSend: { handleSend() },
                             onForceQueue: {
                                 guard !inputText.isEmpty else { return }
                                 sessionManager.queueMessage(inputText, for: session)
@@ -141,9 +125,11 @@ struct SessionDetailView: View {
                         }
                     }
                     // Handle file URLs — any file or folder
-                    provider.loadObject(ofClass: URL.self) { url, _ in
+                    let _ = provider.loadObject(ofClass: URL.self) { url, _ in
                         guard let url = url else { return }
-                        if let image = NSImage(contentsOf: url), image.size.width > 10 {
+                        let loadedImage: NSImage? = NSImage(contentsOf: url)
+                        let isImage = loadedImage != nil && (loadedImage?.size.width ?? 0) > 10
+                        if isImage, let image = loadedImage {
                             let destPath = NSTemporaryDirectory() + "claudestation_drop_\(url.lastPathComponent)"
                             if !FileManager.default.fileExists(atPath: destPath) {
                                 try? FileManager.default.copyItem(atPath: url.path, toPath: destPath)
@@ -155,9 +141,10 @@ struct SessionDetailView: View {
                                 self.pasteboardWatcher.pendingImagePaths.append(destPath)
                             }
                         } else {
+                            let filePath = url.path
                             DispatchQueue.main.async {
                                 let sep = self.inputText.isEmpty ? "" : "\n"
-                                self.inputText += "\(sep)[File: \(url.path)]"
+                                self.inputText += "\(sep)[File: \(filePath)]"
                             }
                         }
                     }
@@ -291,6 +278,10 @@ struct SessionDetailView: View {
             }
 
             ToolbarItem(placement: .automatic) {
+                UsageToolbarView()
+            }
+
+            ToolbarItem(placement: .automatic) {
                 SettingsLink {
                     Label("Settings", systemImage: "gearshape")
                 }
@@ -322,59 +313,116 @@ struct SessionDetailView: View {
             }
         }
     }
-}
 
-// MARK: - Session Header
-
-struct SessionHeaderBar: View {
-    @ObservedObject var session: Session
-    @Binding var activeTab: DetailTab
-    @Environment(\.theme) var theme
-    @State private var showFolderPicker = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(session.status == .running ? theme.accent : theme.successDot)
-                .frame(width: 6, height: 6)
-
-            Button {
-                let panel = NSOpenPanel()
-                panel.canChooseDirectories = true
-                panel.canChooseFiles = false
-                panel.allowsMultipleSelection = false
-                panel.directoryURL = URL(fileURLWithPath: (session.workingDirectory as NSString).expandingTildeInPath)
-                panel.prompt = "Choose"
-                panel.message = "Select working directory"
-                if panel.runModal() == .OK, let url = panel.url {
-                    session.workingDirectory = url.path
-                    session.claudeSessionId = nil // Reset conversation for new directory
-                }
-            } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "folder")
-                        .font(.caption2)
-                    Text(session.workingDirectory)
-                        .font(.system(.caption2, design: .monospaced))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(theme.chromeText)
-            }
-            .buttonStyle(.plain)
-            .help("Change working directory")
-
-            Spacer()
-
-            Text(session.status.rawValue)
-                .font(.caption2)
-                .foregroundStyle(theme.chromeText)
+    private func handleSend() {
+        let hasPendingImages = !pasteboardWatcher.pendingImagePaths.isEmpty
+        guard !inputText.isEmpty || hasPendingImages else { return }
+        var message = inputText
+        for path in pasteboardWatcher.pendingImagePaths {
+            let sep = message.isEmpty ? "" : "\n"
+            message += "\(sep)[Image: \(path)]"
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 3)
-        .modifier(LiquidGlassChrome())
-        .animation(.easeInOut(duration: 0.3), value: session.status)
+        pasteboardWatcher.clearForSend()
+        if session.status == .waitingForInput || session.status == .idle {
+            sessionManager.sendImmediately(message, to: session)
+        } else {
+            sessionManager.queueMessage(message, for: session)
+        }
+        inputText = ""
     }
 }
+
+// MARK: - Usage Toolbar View
+
+struct UsageToolbarView: View {
+    @ObservedObject var usageMonitor: UsageMonitor = .shared
+    @Environment(\.theme) var theme
+
+    private var isStale: Bool {
+        guard let last = usageMonitor.lastUpdated else { return true }
+        return Date().timeIntervalSince(last) > 300
+    }
+
+    var body: some View {
+        if usageMonitor.isLoggedIn {
+            HStack(spacing: 2) {
+                UsagePill(
+                    label: usageMonitor.sessionResetText.isEmpty ? "" : usageMonitor.sessionResetText,
+                    utilization: usageMonitor.sessionUtilization,
+                    resetText: usageMonitor.sessionResetText,
+                    theme: theme
+                )
+                if isStale {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .opacity(isStale ? 0.5 : 1.0)
+            .padding(.leading, 8)
+            .onAppear { usageMonitor.startMonitoring(interval: 120) }
+            .onTapGesture {
+                if isStale {
+                    usageMonitor.openUsageInBrowser()
+                } else {
+                    usageMonitor.refresh()
+                }
+            }
+            .help(isStale ? "Stale — click to reopen Chrome tab" : "Click to refresh — Resets in \(usageMonitor.sessionResetText)")
+        } else {
+            Button {
+                usageMonitor.openUsageInBrowser()
+            } label: {
+                Label("Usage", systemImage: "chart.bar")
+            }
+            .help("Opens claude.ai usage in Chrome")
+        }
+    }
+}
+
+// MARK: - Usage Pill (compact progress bar)
+
+struct UsagePill: View {
+    let label: String
+    let utilization: Double
+    let resetText: String
+    let theme: Theme
+
+    private var barColor: Color {
+        if utilization > 0.8 { return .red }
+        if utilization > 0.6 { return .orange }
+        return theme.accent
+    }
+
+    private var pct: Int { Int(utilization * 100) }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("\(pct)%")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(utilization > 0.8 ? .red : theme.chromeText)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(theme.mutedText.opacity(0.2))
+                    .frame(width: 32, height: 4)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(barColor)
+                    .frame(width: max(1, 32 * utilization), height: 4)
+            }
+
+            if !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(theme.mutedText)
+            }
+        }
+        .help(resetText.isEmpty ? "\(pct)% used" : "\(pct)% used — Resets in \(resetText)")
+    }
+}
+
+// MARK: - Login WebView Sheet
+
 
 // MARK: - Terminal Output
 
@@ -436,7 +484,6 @@ struct AttachmentPreview: View {
                             .stroke(theme.chromeBorder, lineWidth: 1)
                     )
                     .onTapGesture { showFullPreview = true }
-                    .cursor(.pointingHand)
 
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
@@ -527,8 +574,7 @@ struct InputBar: View {
                                                 .stroke(theme.toolCardBorder, lineWidth: 1)
                                         )
                                         .onTapGesture { previewImageIndex = index }
-                                        .cursor(.pointingHand)
-                                    Button { onRemoveImage(index) } label: {
+                                                        Button { onRemoveImage(index) } label: {
                                         Image(systemName: "xmark.circle.fill")
                                             .font(.system(size: 14))
                                             .foregroundStyle(.white)
@@ -554,8 +600,7 @@ struct InputBar: View {
                                         .stroke(theme.toolCardBorder, lineWidth: 1)
                                 )
                                 .onTapGesture { previewImageIndex = 0 }
-                                .cursor(.pointingHand)
-                            Button(action: onRemoveAttachment) {
+                                        Button(action: onRemoveAttachment) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 14))
                                     .foregroundStyle(.white)
@@ -672,5 +717,15 @@ struct InputBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
+    }
+}
+
+// MARK: - Pointer Hand Cursor
+
+extension View {
+    func pointerHand() -> some View {
+        self.onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 }

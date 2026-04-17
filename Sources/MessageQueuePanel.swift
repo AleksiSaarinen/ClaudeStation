@@ -61,7 +61,11 @@ struct InlineQueueStrip: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(theme.assistantBubble.opacity(0.5))
+        .background(theme.assistantBubble.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .modifier(LiquidGlassChrome(cornerRadius: 16))
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
         .animation(.easeInOut(duration: 0.15), value: session.messageQueue.count)
     }
 }

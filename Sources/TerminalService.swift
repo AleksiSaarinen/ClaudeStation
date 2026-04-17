@@ -108,7 +108,7 @@ class TerminalService {
 
         // Build claude command
         let settings = AppSettings.shared
-        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "claude-opus-4-6"]
+        var args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "claude-opus-4-7"]
 
         // Plan mode takes precedence over bypass permissions
         if session.planMode {
@@ -190,6 +190,8 @@ class TerminalService {
         var allTextParts: [String] = [] // All text blocks for content field
         var resultDuration: Int?
         var resultCost: Double?
+        var resultInputTokens: Int?
+        var resultOutputTokens: Int?
 
         // Read stdout line by line — stream blocks into live message
         while true {
@@ -382,9 +384,23 @@ class TerminalService {
                         }
                     }
 
+                case "rate_limit_event":
+                    if let info = json["rate_limit_info"] as? [String: Any] {
+                        let resetsAt = info["resetsAt"] as? TimeInterval
+                        let limitType = info["rateLimitType"] as? String
+                        DispatchQueue.main.async {
+                            if let ts = resetsAt { session.rateLimitResetsAt = Date(timeIntervalSince1970: ts) }
+                            session.rateLimitType = limitType
+                        }
+                    }
+
                 case "result":
                     resultDuration = json["duration_ms"] as? Int
                     resultCost = json["total_cost_usd"] as? Double
+                    if let usage = json["usage"] as? [String: Any] {
+                        resultInputTokens = usage["input_tokens"] as? Int
+                        resultOutputTokens = usage["output_tokens"] as? Int
+                    }
                     if let sid = json["session_id"] as? String {
                         DispatchQueue.main.async { session.claudeSessionId = sid }
                     }
@@ -474,6 +490,8 @@ class TerminalService {
                 session.chatMessages[last].durationApiMs = resultDuration
                 session.chatMessages[last].costUsd = resultCost
                 if let cost = resultCost { session.totalCostUsd += cost }
+                if let inp = resultInputTokens { session.totalInputTokens += inp }
+                if let out = resultOutputTokens { session.totalOutputTokens += out }
             } else if process.terminationStatus != 0 && !stderrText.isEmpty {
                 let err = ChatMessage(role: .assistant, content: "Error: \(stderrText)")
                 session.chatMessages.append(err)

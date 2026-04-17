@@ -45,6 +45,10 @@ class Session: ObservableObject, Identifiable {
     @Published var suggestedActions: [(icon: String, label: String, prompt: String)] = []
     @Published var contextSummary: String = ""
     @Published var totalCostUsd: Double = 0
+    @Published var totalInputTokens: Int = 0
+    @Published var totalOutputTokens: Int = 0
+    @Published var rateLimitResetsAt: Date?
+    @Published var rateLimitType: String?  // "five_hour", "weekly", etc.
     @Published var celebrating: Bool = false
     var celebrationStart: Date = .distantPast
 

@@ -13,6 +13,15 @@ struct ChatView: View {
     @State private var chatPreviewIndex: Int? = nil
     @State private var visibleMessageCount: Int = 20
 
+    /// Dynamic bottom offset accounting for input bar + queue strip
+    private var bottomInsetOffset: CGFloat {
+        let inputBar: CGFloat = 56
+        if session.messageQueue.isEmpty { return inputBar }
+        // Queue header (~30) + per-pill (~34) + padding (~16)
+        let queueHeight: CGFloat = 30 + CGFloat(min(session.messageQueue.count, 3)) * 34 + 16
+        return inputBar + queueHeight
+    }
+
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
         session.chatMessages.last?.content.count ?? 0
@@ -158,8 +167,12 @@ struct ChatView: View {
             if !userScrolledUp { scrollToBottom() }
         }
         .onChange(of: session.messageQueue.count) { _, _ in
-            // Queue strip appearing/growing changes bottom inset — re-scroll
-            if !userScrolledUp { smoothScrollToBottom() }
+            // Queue strip appearing/growing changes bottom inset — re-scroll after layout settles
+            if !userScrolledUp {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    smoothScrollToBottom()
+                }
+            }
         }
         .onAppear {
             userScrolledUp = false
@@ -316,8 +329,7 @@ struct ChatView: View {
             let docHeight = docView.bounds.height
             guard docHeight > visibleHeight else { return }
             // Add offset for the input bar safeAreaInset which overlaps the scroll view
-            let inputBarOffset: CGFloat = 56
-            let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             let currentY = scrollView.contentView.bounds.origin.y
             guard currentY < target.y - 1 else { return }
             isProgrammaticScroll = true
@@ -336,8 +348,7 @@ struct ChatView: View {
             let visibleHeight = scrollView.contentView.bounds.height
             let docHeight = docView.bounds.height
             guard docHeight > visibleHeight else { return }
-            let inputBarOffset: CGFloat = 56
-            let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             isProgrammaticScroll = true
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.4
@@ -357,8 +368,7 @@ struct ChatView: View {
             let visibleHeight = scrollView.contentView.bounds.height
             let docHeight = docView.bounds.height
             guard docHeight > visibleHeight else { return }
-            let inputBarOffset: CGFloat = 56
-            let target = NSPoint(x: 0, y: docHeight - visibleHeight + inputBarOffset)
+            let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             let overshoot = NSPoint(x: 0, y: target.y + 35)
             isProgrammaticScroll = true
 

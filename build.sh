@@ -46,6 +46,8 @@ if [ ! -f "$APP/Contents/Info.plist" ]; then
     <true/>
     <key>CFBundleIconFile</key>
     <string>ClaudeStation</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>ClaudeStation needs access to Chrome to read your claude.ai usage limits.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
@@ -74,7 +76,7 @@ find Resources/Cursors -name "*.png" | while read f; do
 done
 
 echo "Signing with '$IDENTITY'..."
-codesign --force --deep --sign "$IDENTITY" "$APP" 2>&1
+codesign --force --deep --sign "$IDENTITY" --entitlements ClaudeStation.entitlements "$APP" 2>&1
 
 # Install to /Applications (always — the running app reads from disk on restart)
 if [[ "$1" == "--force" ]] && pgrep -f "ClaudeStation.app/Contents/MacOS/ClaudeStation" > /dev/null 2>&1; then
