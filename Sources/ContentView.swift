@@ -326,24 +326,18 @@ struct SessionTab: View {
             // Session cost badge
             if sessionCost > 0 {
                 Text(formatSessionCost(sessionCost))
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .foregroundStyle(theme.mutedText)
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background(theme.mutedText.opacity(0.1))
-                    .clipShape(Capsule())
+                    .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(theme.chromeText.opacity(0.7))
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
             }
 
             // Context size badge (% of 1M window)
             if session.lastContextSize > 0 {
                 let ctxPct = min(99, session.lastContextSize * 100 / 1_000_000)
                 Text("ctx \(ctxPct)%")
-                    .font(.system(size: 7, weight: .medium, design: .monospaced))
-                    .foregroundStyle(ctxPct > 60 ? .orange : theme.mutedText)
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 1)
-                    .background((ctxPct > 60 ? Color.orange : theme.mutedText).opacity(0.1))
-                    .clipShape(Capsule())
+                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(ctxPct > 60 ? .orange : theme.chromeText.opacity(0.6))
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 0.5)
                     .help("Context: \(session.lastContextSize / 1000)k / 1M tokens")
             }
 

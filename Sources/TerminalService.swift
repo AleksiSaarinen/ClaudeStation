@@ -121,6 +121,27 @@ class TerminalService {
             promptText = promptText.replacingCharacters(in: range, with: instruction)
         }
 
+        // Auto-clear context when approaching the limit (compaction doesn't work in -p mode)
+        let ctxPct = session.lastContextSize > 0 ? session.lastContextSize * 100 / 1_000_000 : 0
+        if ctxPct >= 95 {
+            let recentMessages = session.chatMessages.suffix(6)
+            var summary = ""
+            for msg in recentMessages {
+                if msg.role == .user {
+                    summary += "User: \(String(msg.content.prefix(300)))\n"
+                } else if msg.role == .assistant && !msg.content.isEmpty {
+                    summary += "Assistant: \(String(msg.content.prefix(500)))\n"
+                }
+            }
+            session.claudeSessionId = nil
+            session.lastContextSize = 0
+            let sysMsg = ChatMessage(role: .system, content: "Context was at \(ctxPct)% — auto-cleared. Summary of recent conversation injected.")
+            session.chatMessages.append(sysMsg)
+            if !summary.isEmpty {
+                promptText = "<context-from-previous-session>\n\(summary)</context-from-previous-session>\n\n\(promptText)"
+            }
+        }
+
         // Record user message (original text so [Image:] shows in chat)
         let userMsg = ChatMessage(role: .user, content: text)
         DispatchQueue.main.async {
@@ -537,11 +558,8 @@ class TerminalService {
                 self.updateContextSummary(for: session)
             }
 
-            // Generate smart suggestions for next action
+            // Generate smart suggestions for next action (context suggestions appended inside)
             self.generateSuggestions(for: session)
-
-            // Inject context management suggestions when relevant
-            self.injectContextSuggestions(for: session)
 
             // Trigger save after response completes
             NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
@@ -839,7 +857,7 @@ class TerminalService {
 
     // MARK: - Context Management Suggestions
 
-    private func injectContextSuggestions(for session: Session) {
+    private func appendContextSuggestions(for session: Session) {
         let ctxSize = session.lastContextSize
         let ctxPct = ctxSize > 0 ? ctxSize * 100 / 1_000_000 : 0
         let lastContent = (session.chatMessages.last?.content ?? "").lowercased()
@@ -848,22 +866,18 @@ class TerminalService {
             || lastContent.contains("complete") || lastContent.contains("finished")
             || lastContent.contains("all set") || lastContent.contains("you're good")
 
-        // Wait a bit for AI suggestions to arrive first, then append
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            if ctxPct >= 40 {
-                session.suggestedActions.append((
-                    icon: "arrow.triangle.2.circlepath",
-                    label: "Compact context (\(ctxPct)%)",
-                    prompt: "/compact"
-                ))
-            }
-            if taskDone && ctxPct >= 15 {
-                session.suggestedActions.append((
-                    icon: "arrow.counterclockwise",
-                    label: "Clear & start fresh",
-                    prompt: "/clear"
-                ))
-            }
+        if ctxPct >= 40 {
+            session.suggestedActions.append((
+                icon: "arrow.triangle.2.circlepath",
+                label: "Clear context (\(ctxPct)%)",
+                prompt: "/clear"
+            ))
+        } else if taskDone && ctxPct >= 15 {
+            session.suggestedActions.append((
+                icon: "arrow.counterclockwise",
+                label: "Clear & start fresh",
+                prompt: "/clear"
+            ))
         }
     }
 
@@ -961,6 +975,8 @@ class TerminalService {
 
                 DispatchQueue.main.async {
                     session.suggestedActions = suggestions
+                    // Append context management suggestions after AI suggestions
+                    self.appendContextSuggestions(for: session)
                 }
             } catch {}
         }

@@ -37,7 +37,7 @@ class Session: ObservableObject, Identifiable {
     @Published var isProcessingQueue: Bool = false
     @Published var chatMessages: [ChatMessage] = []
     @Published var assistantState: AssistantState = .idle
-    @Published var effortLevel: String = "max"  // low, medium, high, xhigh, max
+    @Published var effortLevel: String = "high"  // low, medium, high, max
     @Published var planMode: Bool = false
     @Published var planResponseReceived: Bool = false
     @Published var lastToolName: String?

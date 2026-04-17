@@ -574,13 +574,14 @@ struct AssistantMessageRow: View {
                 } else {
                     // Group blocks into: text (always visible) + tool chains (collapsible)
                     let groups = groupBlocks(message.blocks)
-                    ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                    let lastToolIdx = groups.lastIndex(where: { if case .tools = $0 { return true }; return false })
+                    ForEach(Array(groups.enumerated()), id: \.offset) { idx, group in
                         switch group {
                         case .text(let text, _):
                             MarkdownText(text: text, isStreaming: isStreaming)
                                 .padding(.horizontal, 12)
                         case .tools(let blocks):
-                            CollapsibleToolGroup(blocks: blocks, message: message, isLatestMessage: isLatestMessage)
+                            CollapsibleToolGroup(blocks: blocks, message: message, isLatestMessage: isLatestMessage, isLastToolGroup: idx == lastToolIdx, totalGroups: groups.count)
                                 .padding(.horizontal, 12)
                         }
                     }
@@ -679,16 +680,20 @@ struct CollapsibleToolGroup: View {
     let blocks: [ContentBlock]
     let message: ChatMessage
     let isLatestMessage: Bool
+    let isLastToolGroup: Bool
+    let totalGroups: Int
     @Environment(\.theme) var theme
     @State private var expanded: Bool
 
-    init(blocks: [ContentBlock], message: ChatMessage, isLatestMessage: Bool = false) {
+    init(blocks: [ContentBlock], message: ChatMessage, isLatestMessage: Bool = false, isLastToolGroup: Bool = true, totalGroups: Int = 1) {
         self.blocks = blocks
         self.message = message
         self.isLatestMessage = isLatestMessage
+        self.isLastToolGroup = isLastToolGroup
+        self.totalGroups = totalGroups
         let toolCount = blocks.filter { if case .toolUse = $0.kind { return true }; return false }.count
-        // Auto-collapse tools on older messages to reduce UI load
-        _expanded = State(initialValue: isLatestMessage && toolCount <= 4)
+        // Auto-collapse: only expand the last tool group in the latest message
+        _expanded = State(initialValue: isLatestMessage && isLastToolGroup && toolCount <= 4)
     }
 
     private var toolSummaryLabel: String {
@@ -716,6 +721,7 @@ struct CollapsibleToolGroup: View {
     }
 
     var body: some View {
+        Group {
         if expanded {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(blocks.enumerated()), id: \.element.id) { _, block in
@@ -772,6 +778,12 @@ struct CollapsibleToolGroup: View {
                 .foregroundStyle(theme.mutedText)
             }
             .buttonStyle(.plain)
+        }
+        }
+        .onChange(of: totalGroups) { _, _ in
+            if !isLastToolGroup && expanded {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
+            }
         }
     }
 }

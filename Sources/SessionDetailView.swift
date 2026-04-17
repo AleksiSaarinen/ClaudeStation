@@ -411,7 +411,7 @@ struct UsagePill: View {
             }
 
             if !label.isEmpty {
-                Text(label)
+                Text(label.replacingOccurrences(of: " min", with: "m").replacingOccurrences(of: " hr", with: "h"))
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(theme.mutedText)
             }
