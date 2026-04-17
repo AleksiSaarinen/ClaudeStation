@@ -740,9 +740,74 @@ struct InputBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 20))
             .modifier(LiquidGlassChrome(cornerRadius: 20))
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: inputText.count)
+            .overlay(alignment: .bottomLeading) {
+                if inputText.hasPrefix("/") {
+                    SlashCommandPopup(inputText: $inputText, onSend: onSend)
+                        .offset(y: -50)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
+    }
+}
+
+// MARK: - Slash Command Popup
+
+struct SlashCommandPopup: View {
+    @Binding var inputText: String
+    var onSend: () -> Void
+    @Environment(\.theme) var theme
+
+    private static let commands: [(cmd: String, desc: String)] = [
+        ("/clear", "Reset context, start fresh"),
+        ("/effort low", "Fastest, cheapest"),
+        ("/effort medium", "Quick edits"),
+        ("/effort high", "Good for most tasks"),
+        ("/effort max", "Deep reasoning"),
+    ]
+
+    private var filtered: [(cmd: String, desc: String)] {
+        let query = inputText.lowercased()
+        if query == "/" { return Self.commands }
+        return Self.commands.filter { $0.cmd.hasPrefix(query) || $0.cmd.contains(query) }
+    }
+
+    var body: some View {
+        if !filtered.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(filtered.enumerated()), id: \.element.cmd) { _, item in
+                    Button {
+                        inputText = item.cmd
+                        onSend()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(item.cmd)
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(theme.assistantText)
+                            Spacer()
+                            Text(item.desc)
+                                .font(.system(size: 10))
+                                .foregroundStyle(theme.mutedText)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color.clear)
+                }
+            }
+            .background(theme.assistantBubble.opacity(0.9))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.chromeBorder.opacity(0.3), lineWidth: 0.5))
+            .modifier(LiquidGlassChrome(cornerRadius: 10))
+            .shadow(color: .black.opacity(0.15), radius: 8, y: -2)
+            .frame(maxWidth: 300)
+            .fixedSize(horizontal: false, vertical: true)
+            .transformEffect(.init(translationX: 0, y: -1))  // position above input
+        }
     }
 }
 
