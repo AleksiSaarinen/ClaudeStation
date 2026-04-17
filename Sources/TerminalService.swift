@@ -447,11 +447,21 @@ class TerminalService {
                     if let usage = json["usage"] as? [String: Any] {
                         resultInputTokens = usage["input_tokens"] as? Int
                         resultOutputTokens = usage["output_tokens"] as? Int
-                        let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
-                        let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
-                        let input = usage["input_tokens"] as? Int ?? 0
-                        let contextSize = input + cacheRead + cacheCreate
-                        DispatchQueue.main.async { session.lastContextSize = contextSize }
+                        // Use last iteration for context size (top-level is cumulative across all turns)
+                        if let iterations = usage["iterations"] as? [[String: Any]], let lastIter = iterations.last {
+                            let cacheRead = lastIter["cache_read_input_tokens"] as? Int ?? 0
+                            let cacheCreate = lastIter["cache_creation_input_tokens"] as? Int ?? 0
+                            let input = lastIter["input_tokens"] as? Int ?? 0
+                            let contextSize = input + cacheRead + cacheCreate
+                            DispatchQueue.main.async { session.lastContextSize = contextSize }
+                        } else {
+                            // Fallback for single-turn responses
+                            let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+                            let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
+                            let input = usage["input_tokens"] as? Int ?? 0
+                            let contextSize = input + cacheRead + cacheCreate
+                            DispatchQueue.main.async { session.lastContextSize = contextSize }
+                        }
                     }
                     if let sid = json["session_id"] as? String {
                         DispatchQueue.main.async { session.claudeSessionId = sid }
