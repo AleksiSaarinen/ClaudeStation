@@ -751,6 +751,12 @@ struct InputBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
     }
+
+    private func formatElapsed(_ secs: TimeInterval) -> String {
+        let s = Int(secs)
+        if s < 60 { return "\(s)s" }
+        return "\(s / 60)m \(s % 60)s"
+    }
 }
 
 // MARK: - Slash Command Popup

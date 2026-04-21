@@ -102,7 +102,8 @@ struct ChatView: View {
                         let isLast = message.id == session.chatMessages.last?.id
                         let isStreaming = isLast
                             && session.assistantState == .responding
-                        AssistantMessageRow(message: message, isStreaming: isStreaming, isLatestMessage: isLast)
+                        let isActive = isLast && session.status == .running
+                        AssistantMessageRow(message: message, isStreaming: isStreaming, isLatestMessage: isLast, isActive: isActive)
                             .id(message.id)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .leading).combined(with: .opacity),
@@ -538,6 +539,7 @@ struct AssistantMessageRow: View {
     let message: ChatMessage
     var isStreaming: Bool = false
     var isLatestMessage: Bool = false
+    var isActive: Bool = false
     @Environment(\.theme) var theme
     @State private var appeared = false
 
@@ -547,14 +549,6 @@ struct AssistantMessageRow: View {
             HStack(spacing: 5) {
                 Circle().fill(theme.accent).frame(width: 6, height: 6)
                 Text("Claude").font(.caption2.bold()).foregroundStyle(theme.chromeText)
-                if isStreaming {
-                    Text("·").foregroundStyle(theme.mutedText)
-                    Image(systemName: "clock").font(.caption2).foregroundStyle(theme.accent)
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(formatDuration(context.date.timeIntervalSince(message.timestamp)))
-                            .font(.caption2).foregroundStyle(theme.accent)
-                    }
-                }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
@@ -594,8 +588,19 @@ struct AssistantMessageRow: View {
                 }
             }
 
-            // Footer: duration + cost (shown after completion)
-            if !isStreaming, let secs = message.durationSeconds, secs > 0 {
+            // Footer: live timer while Claude is working, duration + cost after completion
+            if isActive {
+                HStack(spacing: 5) {
+                    Image(systemName: "clock").font(.caption2)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(formatDuration(context.date.timeIntervalSince(message.timestamp)))
+                            .font(.caption2)
+                    }
+                }
+                .foregroundStyle(theme.accent)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            } else if let secs = message.durationSeconds, secs > 0 {
                 HStack(spacing: 5) {
                     let verb = message.completionVerb ?? "Baked"
                     Text("\(verb) for \(formatDuration(secs))").font(.caption2)
