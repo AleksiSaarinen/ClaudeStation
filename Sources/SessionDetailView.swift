@@ -785,11 +785,11 @@ struct SlashCommandPopup: View {
                         HStack(spacing: 8) {
                             Text(item.cmd)
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(theme.assistantText)
+                                .foregroundStyle(Color.black.opacity(0.85))
                             Spacer()
                             Text(item.desc)
                                 .font(.system(size: 10))
-                                .foregroundStyle(theme.mutedText)
+                                .foregroundStyle(Color.black.opacity(0.5))
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)

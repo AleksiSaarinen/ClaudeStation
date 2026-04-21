@@ -266,6 +266,14 @@ class TerminalService {
                 case "assistant":
                     if let message = json["message"] as? [String: Any],
                        let content = message["content"] as? [[String: Any]] {
+                        // Track context size from each assistant turn (not cumulative)
+                        if let usage = message["usage"] as? [String: Any] {
+                            let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+                            let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
+                            let input = usage["input_tokens"] as? Int ?? 0
+                            let turnContext = input + cacheRead + cacheCreate
+                            DispatchQueue.main.async { session.lastContextSize = turnContext }
+                        }
                         for block in content {
                             guard let blockType = block["type"] as? String else { continue }
 
@@ -447,21 +455,6 @@ class TerminalService {
                     if let usage = json["usage"] as? [String: Any] {
                         resultInputTokens = usage["input_tokens"] as? Int
                         resultOutputTokens = usage["output_tokens"] as? Int
-                        // Use last iteration for context size (top-level is cumulative across all turns)
-                        if let iterations = usage["iterations"] as? [[String: Any]], let lastIter = iterations.last {
-                            let cacheRead = lastIter["cache_read_input_tokens"] as? Int ?? 0
-                            let cacheCreate = lastIter["cache_creation_input_tokens"] as? Int ?? 0
-                            let input = lastIter["input_tokens"] as? Int ?? 0
-                            let contextSize = input + cacheRead + cacheCreate
-                            DispatchQueue.main.async { session.lastContextSize = contextSize }
-                        } else {
-                            // Fallback for single-turn responses
-                            let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
-                            let cacheCreate = usage["cache_creation_input_tokens"] as? Int ?? 0
-                            let input = usage["input_tokens"] as? Int ?? 0
-                            let contextSize = input + cacheRead + cacheCreate
-                            DispatchQueue.main.async { session.lastContextSize = contextSize }
-                        }
                     }
                     if let sid = json["session_id"] as? String {
                         DispatchQueue.main.async { session.claudeSessionId = sid }

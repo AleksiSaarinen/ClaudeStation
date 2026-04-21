@@ -1058,21 +1058,41 @@ struct ToolUseCard: View {
     let name: String
     let input: [String: Any]
     @Environment(\.theme) var theme
+    @State private var showFullImage = false
+
+    private var imagePath: String? {
+        guard name == "Read", let path = input["file_path"] as? String else { return nil }
+        let ext = (path as NSString).pathExtension.lowercased()
+        guard ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"].contains(ext) else { return nil }
+        return path
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: toolIcon)
-                .font(.caption)
-                .foregroundStyle(toolColor)
-                .frame(width: 16)
-            Text(displayName)
-                .font(theme.monoCaptionFont.bold())
-                .foregroundStyle(toolColor)
-            Text(toolSummary)
-                .font(theme.monoCaptionFont)
-                .foregroundStyle(theme.toolCardText)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: toolIcon)
+                    .font(.caption)
+                    .foregroundStyle(toolColor)
+                    .frame(width: 16)
+                Text(displayName)
+                    .font(theme.monoCaptionFont.bold())
+                    .foregroundStyle(toolColor)
+                Text(toolSummary)
+                    .font(theme.monoCaptionFont)
+                    .foregroundStyle(theme.toolCardText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            // Show image preview for Read on image files
+            if let path = imagePath, let nsImage = NSImage(contentsOfFile: path) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: showFullImage ? 400 : 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .onTapGesture { withAnimation(.easeInOut(duration: 0.2)) { showFullImage.toggle() } }
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
