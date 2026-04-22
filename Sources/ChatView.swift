@@ -614,7 +614,7 @@ struct AssistantMessageRow: View {
                 .padding(.top, 2)
             }
 
-            Spacer().frame(height: 10)
+            Spacer().frame(height: 8)
         }
         .background(theme.assistantBubble.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
