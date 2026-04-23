@@ -676,7 +676,7 @@ struct InputBar: View {
                     // Effort level cycle
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) {
-                            let levels = ["low", "medium", "high", "max"]
+                            let levels = ["low", "medium", "high", "xhigh", "max"]
                             let idx = levels.firstIndex(of: session.effortLevel) ?? 3
                             session.effortLevel = levels[(idx + 1) % levels.count]
                         }
@@ -686,6 +686,7 @@ struct InputBar: View {
                             case "low": return "Lo"
                             case "medium": return "Med"
                             case "high": return "Hi"
+                            case "xhigh": return "XHi"
                             default: return "Max"
                             }
                         }()
@@ -771,6 +772,7 @@ struct SlashCommandPopup: View {
         ("/effort low", "Fastest, cheapest"),
         ("/effort medium", "Quick edits"),
         ("/effort high", "Good for most tasks"),
+        ("/effort xhigh", "Harder problems"),
         ("/effort max", "Deep reasoning"),
     ]
 
