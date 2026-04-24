@@ -103,7 +103,7 @@ struct ChatView: View {
                         let isStreaming = isLast
                             && session.assistantState == .responding
                         let isActive = isLast && session.status == .running
-                        AssistantMessageRow(message: message, isStreaming: isStreaming, isLatestMessage: isLast, isActive: isActive)
+                        AssistantMessageRow(message: message, session: session, isStreaming: isStreaming, isLatestMessage: isLast, isActive: isActive)
                             .id(message.id)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .leading).combined(with: .opacity),
@@ -537,6 +537,7 @@ struct UserMessageRow: View {
 
 struct AssistantMessageRow: View {
     let message: ChatMessage
+    @ObservedObject var session: Session
     var isStreaming: Bool = false
     var isLatestMessage: Bool = false
     var isActive: Bool = false
@@ -575,7 +576,7 @@ struct AssistantMessageRow: View {
                             MarkdownText(text: text, isStreaming: isStreaming)
                                 .padding(.horizontal, 12)
                         case .tools(let blocks):
-                            CollapsibleToolGroup(blocks: blocks, message: message, isLatestMessage: isLatestMessage, isLastToolGroup: idx == lastToolIdx, totalGroups: groups.count)
+                            CollapsibleToolGroup(blocks: blocks, message: message, session: session, isLatestMessage: isLatestMessage, isLastToolGroup: idx == lastToolIdx, totalGroups: groups.count)
                                 .padding(.horizontal, 12)
                         }
                     }
@@ -684,21 +685,28 @@ struct AssistantMessageRow: View {
 struct CollapsibleToolGroup: View {
     let blocks: [ContentBlock]
     let message: ChatMessage
+    @ObservedObject var session: Session
     let isLatestMessage: Bool
     let isLastToolGroup: Bool
     let totalGroups: Int
     @Environment(\.theme) var theme
     @State private var expanded: Bool
 
-    init(blocks: [ContentBlock], message: ChatMessage, isLatestMessage: Bool = false, isLastToolGroup: Bool = true, totalGroups: Int = 1) {
+    init(blocks: [ContentBlock], message: ChatMessage, session: Session, isLatestMessage: Bool = false, isLastToolGroup: Bool = true, totalGroups: Int = 1) {
         self.blocks = blocks
         self.message = message
+        self.session = session
         self.isLatestMessage = isLatestMessage
         self.isLastToolGroup = isLastToolGroup
         self.totalGroups = totalGroups
         let toolCount = blocks.filter { if case .toolUse = $0.kind { return true }; return false }.count
-        // Auto-collapse: only expand the last tool group in the latest message
-        _expanded = State(initialValue: isLatestMessage && isLastToolGroup && toolCount <= 4)
+        let hasAskUser = blocks.contains { b in
+            if case .toolUse(let n, _) = b.kind { return n == "AskUserQuestion" }
+            return false
+        }
+        // Auto-collapse: only expand the last tool group in the latest message.
+        // Always expand if an AskUserQuestion card is present so the user sees it.
+        _expanded = State(initialValue: hasAskUser || (isLatestMessage && isLastToolGroup && toolCount <= 4))
     }
 
     private var toolSummaryLabel: String {
@@ -746,6 +754,8 @@ struct CollapsibleToolGroup: View {
                             if !hasPlanFile {
                                 PlanSummaryCard(blocks: message.blocks)
                             }
+                        } else if name == "AskUserQuestion" {
+                            AskUserQuestionCard(blockId: block.id, input: block.toolInput, session: session)
                         } else {
                             ToolUseCard(name: name, input: block.toolInput)
                         }
@@ -1437,6 +1447,168 @@ struct ExecutePlanButton: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Ask User Question Card
+
+/// Renders the AskUserQuestion tool call as clickable options. In headless -p
+/// mode Claude can't actually receive the answer, so picking an option sends
+/// it back as a new user message and Claude picks up on the next turn.
+struct AskUserQuestionCard: View {
+    let blockId: String
+    let input: [String: Any]
+    @ObservedObject var session: Session
+    @EnvironmentObject var sessionManager: SessionManager
+    @Environment(\.theme) var theme
+    @State private var selections: [Int: Set<Int>] = [:]
+    @State private var submittedAnswer: String?
+
+    private var questions: [[String: Any]] {
+        input["questions"] as? [[String: Any]] ?? []
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "questionmark.circle.fill")
+                    .foregroundStyle(theme.accent)
+                Text(submittedAnswer == nil ? "Claude is asking" : "You answered")
+                    .font(.system(.caption, weight: .semibold))
+                    .foregroundStyle(theme.chromeText)
+            }
+
+            if let answer = submittedAnswer {
+                Text(answer)
+                    .font(theme.monoCaptionFont)
+                    .foregroundStyle(theme.assistantText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(Array(questions.enumerated()), id: \.offset) { qIdx, question in
+                    questionBlock(index: qIdx, question: question)
+                }
+
+                Button(action: submit) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill").font(.caption)
+                        Text("Send answer").font(.system(.caption, weight: .semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(canSubmit ? theme.accent : theme.chromeText.opacity(0.25))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSubmit)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.toolCardBg)
+        .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4)))
+        .overlay(
+            RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4))
+                .stroke(theme.accent.opacity(0.5), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func questionBlock(index qIdx: Int, question: [String: Any]) -> some View {
+        let header = question["header"] as? String ?? ""
+        let text = question["question"] as? String ?? ""
+        let multiSelect = question["multiSelect"] as? Bool ?? false
+        let options = question["options"] as? [[String: Any]] ?? []
+        let selected = selections[qIdx] ?? []
+
+        VStack(alignment: .leading, spacing: 6) {
+            if !header.isEmpty {
+                Text(header)
+                    .font(.system(.caption2, weight: .bold))
+                    .foregroundStyle(theme.accent)
+                    .textCase(.uppercase)
+            }
+            if !text.isEmpty {
+                Text(text)
+                    .font(theme.monoCaptionFont)
+                    .foregroundStyle(theme.assistantText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(options.enumerated()), id: \.offset) { oIdx, option in
+                    let label = option["label"] as? String ?? ""
+                    let description = option["description"] as? String ?? ""
+                    let isSelected = selected.contains(oIdx)
+                    Button {
+                        toggle(question: qIdx, option: oIdx, multiSelect: multiSelect)
+                    } label: {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: multiSelect
+                                  ? (isSelected ? "checkmark.square.fill" : "square")
+                                  : (isSelected ? "largecircle.fill.circle" : "circle"))
+                                .foregroundStyle(isSelected ? theme.accent : theme.mutedText)
+                                .font(.system(size: 12))
+                                .padding(.top, 1)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(label)
+                                    .font(.system(.caption, weight: .medium))
+                                    .foregroundStyle(theme.assistantText)
+                                if !description.isEmpty {
+                                    Text(description)
+                                        .font(.caption2)
+                                        .foregroundStyle(theme.mutedText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(isSelected ? theme.accent.opacity(0.1) : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(isSelected ? theme.accent.opacity(0.5) : theme.toolCardBorder, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var canSubmit: Bool {
+        guard !questions.isEmpty else { return false }
+        return questions.indices.allSatisfy { !(selections[$0]?.isEmpty ?? true) }
+    }
+
+    private func toggle(question qIdx: Int, option oIdx: Int, multiSelect: Bool) {
+        var current = selections[qIdx] ?? []
+        if multiSelect {
+            if current.contains(oIdx) { current.remove(oIdx) } else { current.insert(oIdx) }
+        } else {
+            current = [oIdx]
+        }
+        selections[qIdx] = current
+    }
+
+    private func submit() {
+        guard canSubmit else { return }
+        var lines: [String] = []
+        for (qIdx, question) in questions.enumerated() {
+            let header = question["header"] as? String ?? "Question \(qIdx + 1)"
+            let options = question["options"] as? [[String: Any]] ?? []
+            let picked = (selections[qIdx] ?? []).sorted().compactMap { idx -> String? in
+                guard idx < options.count else { return nil }
+                return options[idx]["label"] as? String
+            }
+            lines.append("- \(header): \(picked.joined(separator: ", "))")
+        }
+        let answer = "Answers to your questions:\n" + lines.joined(separator: "\n")
+        submittedAnswer = answer
+        sessionManager.sendImmediately(answer, to: session)
     }
 }
 

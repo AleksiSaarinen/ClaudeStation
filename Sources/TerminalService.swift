@@ -341,9 +341,11 @@ class TerminalService {
                                         session.sleepEndTime = nil
                                     }
                                     if name == "AskUserQuestion" {
-                                        let question = input["question"] as? String ?? "Waiting for your input..."
-                                        session.assistantState = .thinking(question)
-                                        session.status = .waitingForInput
+                                        // The question card renders inline in chat — just surface
+                                        // a short label while the stream continues. Don't flip
+                                        // status to waitingForInput here; Claude is still running
+                                        // and the queue would auto-send the next message.
+                                        session.assistantState = .thinking("Asking you a question...")
                                     } else {
                                         session.assistantState = .thinking(label)
                                     }
