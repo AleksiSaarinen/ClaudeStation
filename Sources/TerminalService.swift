@@ -160,6 +160,9 @@ class TerminalService {
         // Plan mode takes precedence over bypass permissions
         if session.planMode {
             args += ["--permission-mode", "plan"]
+            // In headless -p mode there's no permission prompter, so research
+            // tools get auto-denied. Allow read-only research tools explicitly.
+            args += ["--allowedTools", "WebSearch", "WebFetch"]
         } else if settings.alwaysBypassPermissions {
             args.append("--dangerously-skip-permissions")
         }
