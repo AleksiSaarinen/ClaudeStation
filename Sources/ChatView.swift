@@ -466,12 +466,21 @@ struct UserMessageRow: View {
     var onImageTap: (([String], Int) -> Void)? = nil
     @Environment(\.theme) var theme
     @State private var appeared = false
+    @State private var expanded = false
+
+    private static let collapsedLineLimit = 8
+    private static let collapsedCharThreshold = 400
 
     private var textContent: String {
         // Strip [Image: path] from display text
         message.content.replacingOccurrences(
             of: "\\[Image: [^\\]]+\\]", with: "", options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isLong: Bool {
+        textContent.count > Self.collapsedCharThreshold
+            || textContent.split(whereSeparator: { $0.isNewline }).count > Self.collapsedLineLimit
     }
 
     private var imagePaths: [String] {
@@ -518,6 +527,24 @@ struct UserMessageRow: View {
                         .font(theme.monoFont)
                         .foregroundStyle(theme.userBubbleText)
                         .textSelection(.enabled)
+                        .lineLimit(expanded || !isLong ? nil : Self.collapsedLineLimit)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if isLong {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                                    .font(.caption2)
+                                Text(expanded ? "Show less" : "Show full message")
+                                    .font(.caption2)
+                            }
+                            .foregroundStyle(theme.userBubbleText.opacity(0.65))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.top, 2)
+                    }
                 }
             }
             .padding(.horizontal, 14)
