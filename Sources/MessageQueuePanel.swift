@@ -79,6 +79,19 @@ struct QueuePill: View {
     @Environment(\.theme) var theme
     @State private var isEditing = false
 
+    private var imageCount: Int {
+        let pattern = "\\[Image: [^\\]]+\\]"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
+        let range = NSRange(message.text.startIndex..., in: message.text)
+        return regex.numberOfMatches(in: message.text, range: range)
+    }
+
+    private var displayText: String {
+        message.text
+            .replacingOccurrences(of: "\\[Image: [^\\]]+\\]", with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             if isNext {
@@ -92,6 +105,21 @@ struct QueuePill: View {
                     .frame(width: 16)
             }
 
+            if !isEditing && imageCount > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "photo")
+                        .font(.caption2)
+                    if imageCount > 1 {
+                        Text("\(imageCount)")
+                            .font(.system(.caption2, design: .monospaced).bold())
+                    }
+                }
+                .foregroundStyle(theme.accent)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(theme.accent.opacity(0.15), in: Capsule())
+            }
+
             if isEditing {
                 TextField("Edit message", text: $message.text, onCommit: {
                     isEditing = false
@@ -101,11 +129,12 @@ struct QueuePill: View {
                 .foregroundStyle(theme.assistantText)
                 .onExitCommand { isEditing = false }
             } else {
-                Text(message.text)
+                Text(displayText.isEmpty ? "(image only)" : displayText)
                     .font(.system(.caption, design: .monospaced))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .foregroundStyle(theme.assistantText)
+                    .foregroundStyle(displayText.isEmpty ? theme.mutedText : theme.assistantText)
+                    .italic(displayText.isEmpty)
                     .onTapGesture { isEditing = true }
             }
 
