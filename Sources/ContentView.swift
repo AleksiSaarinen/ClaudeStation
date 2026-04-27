@@ -87,6 +87,7 @@ struct ContentView: View {
             CommandPalette(isPresented: $showCommandPalette)
                 .animation(.easeOut(duration: 0.15), value: showCommandPalette)
         }
+        .rgbHueRotation(active: theme.id == "rgb")
         .keyboardShortcut(KeyEquivalent("k"), modifiers: .command, action: {
             showCommandPalette.toggle()
         })
@@ -505,6 +506,7 @@ struct DetachedSessionWindow: View {
                     .id(session.id)
             }
             .background(theme.chatBackground)
+            .rgbHueRotation(active: theme.id == "rgb")
             .onDisappear {
                 // Window closed via traffic light → reattach session
                 if sessionManager.detachedSessionIds.contains(sessionId) {

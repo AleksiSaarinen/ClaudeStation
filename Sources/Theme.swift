@@ -608,7 +608,28 @@ extension Theme {
         )
     )
 
-    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon, melon, sorbet, aero]
+    static let rgb = Theme(
+        id: "rgb", name: "RGB",
+        chatBg: Color(hex: "#0A0410"), chatBgGradientEnd: Color(hex: "#400010"),
+        userBubble: Color(hex: "#FF1A2E"), userBubbleText: .white,
+        assistantBubble: Color(hex: "#1A0A14"), assistantBubbleBorder: Color(hex: "#FF1A2E"), assistantText: Color(hex: "#F0F0F8"),
+        toolCardBg: Color(hex: "#14081A"), toolCardBorder: Color(hex: "#FF1A2E"), toolCardText: Color(hex: "#C0C0D0"),
+        accent: Color(hex: "#FF1A2E"),
+        chromeBar: Color(hex: "#14081A"), chromeBorder: Color(hex: "#80101A"), chromeText: Color(hex: "#C0C0D0"),
+        inputBg: Color(hex: "#14081A"), inputBorder: Color(hex: "#FF1A2E"),
+        mutedText: Color(hex: "#707080"), successDot: Color(hex: "#1AFF8A"),
+        costText: Color(hex: "#707080"), timestampText: Color(hex: "#707080"),
+        promptChar: "❯", promptColor: Color(hex: "#FF1A2E"),
+        fontMono: "Menlo", fontUI: ".AppleSystemUIFont", borderRadius: 12,
+        petPalette: PetPalette(
+            body: NSColor(Color(hex: "#FF1A2E")),
+            highlight: NSColor(Color(hex: "#FF5A5E")),
+            shadow: NSColor(Color(hex: "#C00010")),
+            eyes: NSColor(Color(hex: "#1A0A14"))
+        )
+    )
+
+    static let all: [Theme] = [midnight, aurora, rose, paper, phosphor, deepSea, amber, sakura, violet, neon, melon, sorbet, aero, rgb]
 
     static func byId(_ id: String) -> Theme {
         all.first { $0.id == id } ?? midnight
@@ -666,5 +687,23 @@ extension EnvironmentValues {
     var theme: Theme {
         get { self[ThemeKey.self] }
         set { self[ThemeKey.self] = newValue }
+    }
+}
+
+// MARK: - RGB Hue Rotation
+// Continuously rotates the hue of saturated colors when the RGB theme is active.
+// Whites/grays have zero saturation, so text stays readable while accents cycle.
+extension View {
+    @ViewBuilder
+    func rgbHueRotation(active: Bool, period: Double = 12) -> some View {
+        if active {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let phase = t.truncatingRemainder(dividingBy: period) / period
+                self.hueRotation(.degrees(phase * 360))
+            }
+        } else {
+            self
+        }
     }
 }
