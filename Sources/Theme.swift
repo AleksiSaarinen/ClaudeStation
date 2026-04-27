@@ -53,7 +53,9 @@ struct Theme: Identifiable, Equatable {
     // Pet palette (nil = use original colors)
     var petPalette: PetPalette? = nil
 
-    static func == (lhs: Theme, rhs: Theme) -> Bool { lhs.id == rhs.id }
+    static func == (lhs: Theme, rhs: Theme) -> Bool {
+        lhs.id == rhs.id && lhs.fontMono == rhs.fontMono && lhs.fontUI == rhs.fontUI
+    }
 
     /// Background view — animated gradient if configured, solid color otherwise
     @ViewBuilder func chatBackground(toolName: String? = nil, isRunning: Bool = false, session: Session? = nil) -> some View {

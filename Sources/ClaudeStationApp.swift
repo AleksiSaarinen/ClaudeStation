@@ -52,7 +52,6 @@ struct ClaudeStationApp: App {
                     UsageMonitor.shared.startMonitoring(interval: 120)
                 }
                 .environment(\.theme, activeTheme)
-                .id(selectedThemeId + customMonoFont)
                 .frame(minWidth: 350, minHeight: 300)
                 .onOpenURL { url in
                     handleURL(url)
