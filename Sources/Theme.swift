@@ -693,17 +693,61 @@ extension EnvironmentValues {
 // MARK: - RGB Hue Rotation
 // Continuously rotates the hue of saturated colors when the RGB theme is active.
 // Whites/grays have zero saturation, so text stays readable while accents cycle.
-extension View {
-    @ViewBuilder
-    func rgbHueRotation(active: Bool, period: Double = 12) -> some View {
-        if active {
-            TimelineView(.animation) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                let phase = t.truncatingRemainder(dividingBy: period) / period
-                self.hueRotation(.degrees(phase * 360))
-            }
-        } else {
-            self
+//
+// Phase is integrated as ∫ω·dt, so changing `period` adjusts angular velocity
+// without snapping the hue — needed for smooth idle↔working speed transitions.
+
+final class RGBHueState: ObservableObject {
+    @Published var degrees: Double = 0
+    var periodProvider: () -> Double = { 12 }
+    private var timer: Timer?
+    private var lastTick: CFTimeInterval = 0
+
+    func start() {
+        guard timer == nil else { return }
+        lastTick = CACurrentMediaTime()
+        let t = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let now = CACurrentMediaTime()
+            let dt = now - self.lastTick
+            self.lastTick = now
+            let period = max(0.1, self.periodProvider())
+            let speed = 360.0 / period
+            self.degrees = (self.degrees + dt * speed).truncatingRemainder(dividingBy: 360)
         }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    deinit { timer?.invalidate() }
+}
+
+struct RGBHueRotationModifier: ViewModifier {
+    @StateObject private var state = RGBHueState()
+    let active: Bool
+    let periodProvider: () -> Double
+
+    func body(content: Content) -> some View {
+        content
+            .hueRotation(.degrees(active ? state.degrees : 0))
+            .onAppear {
+                state.periodProvider = periodProvider
+                if active { state.start() }
+            }
+            .onChange(of: active) { _, isActive in
+                if isActive { state.start() } else { state.stop() }
+            }
+            .onDisappear { state.stop() }
+    }
+}
+
+extension View {
+    func rgbHueRotation(active: Bool, period: @escaping () -> Double = { 12 }) -> some View {
+        modifier(RGBHueRotationModifier(active: active, periodProvider: period))
     }
 }
