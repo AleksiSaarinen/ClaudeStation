@@ -11,6 +11,10 @@ struct ChatView: View {
     @State private var isProgrammaticScroll = false
     @State private var isAnimatingScroll = false
     @State private var programmaticScrollEpoch: Int = 0
+    /// Gate that hides the chat until layout has settled and we've snapped
+    /// to the bottom. Avoids the "stuck at top after tab switch" problem by
+    /// not racing SwiftUI's layout — we let it finish, then reveal.
+    @State private var contentReady: Bool = false
     @State private var chatPreviewImages: [String] = []
     @State private var chatPreviewIndex: Int? = nil
     @State private var visibleMessageCount: Int = 20
@@ -161,6 +165,16 @@ struct ChatView: View {
         }
         .onAppear {
             userScrolledUp = false
+            contentReady = false
+            // Let SwiftUI lay out the (invisible) content while
+            // snapToBottomOnAppear's retry burst pins it to the bottom,
+            // then reveal. The doc-view KVO observer set up by
+            // observeUserScroll continues running after this and handles
+            // streaming/tool-call growth.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                scrollToBottom()
+                contentReady = true
+            }
         }
         .onDisappear {
             for observer in scrollObservers {
@@ -260,6 +274,18 @@ struct ChatView: View {
             }
         }
         .animation(.easeInOut(duration: 0.15), value: chatPreviewIndex)
+        // Hide while the chat is laying out; reveal once we've snapped to
+        // bottom. Opacity preserves layout, so KVO/scroll-to-bottom run on
+        // the invisible content and we just flip visibility when settled.
+        .opacity(contentReady ? 1 : 0)
+        .overlay {
+            if !contentReady {
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(0.5)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: contentReady)
     }
 
     /// Subscribe to:
@@ -280,7 +306,7 @@ struct ChatView: View {
             object: scrollView.contentView,
             queue: .main
         ) { [self] _ in
-            guard !isProgrammaticScroll else { return }
+            guard !isProgrammaticScroll, contentReady else { return }
             userScrolledUp = !isScrollViewAtBottom(scrollView)
         }
         scrollObservers.append(boundsObserver)
