@@ -166,14 +166,13 @@ struct ChatView: View {
         .onAppear {
             userScrolledUp = false
             contentReady = false
-            // Let SwiftUI lay out the (invisible) content while
-            // snapToBottomOnAppear's retry burst pins it to the bottom,
-            // then reveal. The doc-view KVO observer set up by
-            // observeUserScroll continues running after this and handles
-            // streaming/tool-call growth.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                scrollToBottom()
-                contentReady = true
+            // The retry burst in snapToBottomOnAppear reveals as soon as
+            // it confirms we're at the bottom. This is just a safety net so
+            // the spinner can't get stuck if something pathological happens
+            // with layout — better to show the chat (even if not at bottom)
+            // than show a spinner forever.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if !contentReady { contentReady = true }
             }
         }
         .onDisappear {
@@ -340,13 +339,37 @@ struct ChatView: View {
     }
 
     private func snapToBottomOnAppear() {
-        let delays: [Double] = [0.0, 0.05, 0.15, 0.3, 0.6, 1.0]
+        let delays: [Double] = [0.0, 0.05, 0.15, 0.3, 0.6, 1.0, 1.5, 2.0]
         for delay in delays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                // Once revealed, the user owns the scroll position — stop
+                // forcing snaps from the appearance-time retry chain.
+                guard !contentReady else { return }
                 userScrolledUp = false
                 scrollToBottom()
+                // Reveal as soon as we're actually at the bottom (or the
+                // content fits in the viewport — nothing to scroll).
+                DispatchQueue.main.async {
+                    if !contentReady, isPositionedAtBottom() {
+                        contentReady = true
+                    }
+                }
             }
         }
+    }
+
+    private func isPositionedAtBottom() -> Bool {
+        guard let scrollView = chatScrollView,
+              let docView = scrollView.documentView else { return false }
+        let docHeight = docView.bounds.height
+        let visibleHeight = scrollView.contentView.bounds.height
+        // Doc not yet sized; can't tell.
+        guard docHeight > 0, visibleHeight > 0 else { return false }
+        // Content fits in viewport — there is no "bottom" to be off from.
+        if docHeight <= visibleHeight { return true }
+        let maxY = docHeight - visibleHeight
+        let currentY = scrollView.contentView.bounds.origin.y
+        return currentY >= maxY - 4
     }
 
     private func isScrollViewAtBottom(_ scrollView: NSScrollView) -> Bool {
