@@ -53,9 +53,7 @@ struct ChatView: View {
                 ScrollViewFinder { sv in
                     chatScrollView = sv
                     observeUserScroll(sv)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        scrollToBottom()
-                    }
+                    snapToBottom()
                 }
                 .frame(height: 0)
                 if session.chatMessages.isEmpty && session.status != .idle {
@@ -177,9 +175,7 @@ struct ChatView: View {
         }
         .onAppear {
             userScrolledUp = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                scrollToBottom()
-            }
+            snapToBottom()
         }
         .onDisappear {
             // Clean up notification observers
@@ -315,6 +311,19 @@ struct ChatView: View {
         let offsetY = scrollView.contentView.bounds.origin.y
         let inputBarOffset: CGFloat = 56
         return offsetY + viewportHeight >= contentHeight - 80 + inputBarOffset
+    }
+
+    /// Scroll-to-bottom for fresh appearance / session switch.
+    /// Retries across the layout settle window since markdown/code blocks
+    /// resize asynchronously and a single early call usually misses.
+    private func snapToBottom() {
+        let delays: [Double] = [0.05, 0.15, 0.3, 0.6, 1.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard !userScrolledUp else { return }
+                scrollToBottom()
+            }
+        }
     }
 
     /// Scroll the underlying NSScrollView to the bottom.
