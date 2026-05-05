@@ -842,29 +842,7 @@ struct MarkdownText: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(parts.enumerated()), id: \.offset) { idx, part in
                 if part.isCode {
-                    // Code block with syntax highlighting
-                    VStack(alignment: .leading, spacing: 0) {
-                        if !part.language.isEmpty {
-                            Text(part.language)
-                                .font(theme.monoCaption2Font)
-                                .foregroundStyle(theme.mutedText)
-                                .padding(.horizontal, 10)
-                                .padding(.top, 6)
-                        }
-                        Text(highlightSyntax(part.text))
-                            .font(theme.monoCaption2Font)
-                            .textSelection(.enabled)
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .background(theme.toolCardBg)
-                    .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4)))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4))
-                            .stroke(theme.toolCardBorder, lineWidth: 1)
-                    )
+                    CodeBlockView(code: part.text, language: part.language, highlighted: highlightSyntax(part.text))
                 } else {
                     let blocks = splitMarkdownBlocks(part.text)
                     ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
@@ -1064,6 +1042,69 @@ struct MarkdownText: View {
             if let lower, let upper {
                 string[lower..<upper].foregroundColor = color
             }
+        }
+    }
+}
+
+// MARK: - Code Block
+
+private struct CodeBlockView: View {
+    let code: String
+    let language: String
+    let highlighted: AttributedString
+    @Environment(\.theme) var theme
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !language.isEmpty {
+                Text(language)
+                    .font(theme.monoCaption2Font)
+                    .foregroundStyle(theme.mutedText)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 6)
+            }
+            Text(highlighted)
+                .font(theme.monoCaption2Font)
+                .textSelection(.enabled)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(theme.toolCardBg)
+        .clipShape(RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4)))
+        .overlay(
+            RoundedRectangle(cornerRadius: max(theme.borderRadius - 4, 4))
+                .stroke(theme.toolCardBorder, lineWidth: 1)
+        )
+        .overlay(alignment: .topTrailing) {
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(copied ? theme.accent : theme.mutedText)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 22, height: 22)
+                    .background(theme.toolCardBg.opacity(0.85))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(theme.toolCardBorder.opacity(0.6), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(6)
+            .help("Copy")
+        }
+    }
+
+    private func copy() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(code, forType: .string)
+        withAnimation(.easeInOut(duration: 0.2)) { copied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeInOut(duration: 0.2)) { copied = false }
         }
     }
 }
