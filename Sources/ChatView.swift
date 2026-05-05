@@ -303,9 +303,23 @@ struct ChatView: View {
             }
         }
 
-        // Initial snap once observers are wired and the view is in hierarchy.
-        DispatchQueue.main.async {
-            scrollToBottom()
+        // Initial snap. KVO catches growth that happens *after* observation,
+        // but on session switch SwiftUI often lays out the doc view in one
+        // shot before the ScrollViewFinder dispatch resolves — there's no
+        // subsequent height change for KVO to see. Retry across the
+        // appearance window to cover that case and force-reset
+        // userScrolledUp in case a bounds-changed notification mis-marked
+        // it during the same window.
+        snapToBottomOnAppear()
+    }
+
+    private func snapToBottomOnAppear() {
+        let delays: [Double] = [0.0, 0.05, 0.15, 0.3, 0.6, 1.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                userScrolledUp = false
+                scrollToBottom()
+            }
         }
     }
 
