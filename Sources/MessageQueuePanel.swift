@@ -39,14 +39,18 @@ struct InlineQueueStrip: View {
                 .buttonStyle(.borderless)
             }
 
-            let count = expanded ? session.messageQueue.count : min(3, session.messageQueue.count)
-            ForEach(Array(session.messageQueue.prefix(count).enumerated()), id: \.element.id) { index, message in
+            let visibleCount = expanded ? session.messageQueue.count : min(3, session.messageQueue.count)
+            let visible = Array(session.messageQueue.prefix(visibleCount))
+            ForEach(Array(visible.enumerated()), id: \.element.id) { index, message in
                 QueuePill(
-                    message: $session.messageQueue[index], index: index, isNext: index == 0,
+                    message: messageBinding(id: message.id, fallback: message),
+                    index: index,
+                    isNext: index == 0,
                     onSendNow: {
-                        let text = session.messageQueue[index].text
-                        sessionManager.dequeueMessage(message.id, from: session)
-                        sessionManager.sendImmediately(text, to: session)
+                        if let text = session.messageQueue.first(where: { $0.id == message.id })?.text {
+                            sessionManager.dequeueMessage(message.id, from: session)
+                            sessionManager.sendImmediately(text, to: session)
+                        }
                     },
                     onDelete: { sessionManager.dequeueMessage(message.id, from: session) }
                 )
@@ -67,6 +71,17 @@ struct InlineQueueStrip: View {
         .padding(.horizontal, 12)
         .padding(.top, 4)
         .animation(.easeInOut(duration: 0.15), value: session.messageQueue.count)
+    }
+
+    private func messageBinding(id: UUID, fallback: QueuedMessage) -> Binding<QueuedMessage> {
+        Binding(
+            get: { session.messageQueue.first(where: { $0.id == id }) ?? fallback },
+            set: { newValue in
+                if let idx = session.messageQueue.firstIndex(where: { $0.id == id }) {
+                    session.messageQueue[idx] = newValue
+                }
+            }
+        )
     }
 }
 
