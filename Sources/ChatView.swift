@@ -8,6 +8,7 @@ struct ChatView: View {
     @State private var chatScrollView: NSScrollView?
     @State private var userScrolledUp = false
     @State private var scrollObservers: [NSObjectProtocol] = []
+    @State private var docFrameObservation: NSKeyValueObservation?
     @State private var isProgrammaticScroll = false
     @State private var chatPreviewImages: [String] = []
     @State private var chatPreviewIndex: Int? = nil
@@ -20,16 +21,6 @@ struct ChatView: View {
         // Queue header (~30) + per-pill (~34) + padding (~16)
         let queueHeight: CGFloat = 30 + CGFloat(min(session.messageQueue.count, 3)) * 34 + 16
         return inputBar + queueHeight
-    }
-
-    /// Track content length of last message to detect streaming updates
-    private var lastMessageContent: Int {
-        session.chatMessages.last?.content.count ?? 0
-    }
-
-    /// Track block count of last message to detect tool use updates
-    private var lastMessageBlockCount: Int {
-        session.chatMessages.last?.blocks.count ?? 0
     }
 
     /// Check if the last assistant message looks like a completed plan (not a permission request)
@@ -53,7 +44,6 @@ struct ChatView: View {
                 ScrollViewFinder { sv in
                     chatScrollView = sv
                     observeUserScroll(sv)
-                    snapToBottom()
                 }
                 .frame(height: 0)
                 if session.chatMessages.isEmpty && session.status != .idle {
@@ -147,26 +137,21 @@ struct ChatView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .onChange(of: session.chatMessages.count) { old, new in
-            // User sent a message → reset and scroll
+            // User sent a message → reset scroll lock and bounce to bottom.
+            // (Doc-view KVO would scroll us linearly; bouncy is the intended UX
+            // for user-initiated sends.)
             if new > old, let last = session.chatMessages.last, last.role == .user {
                 userScrolledUp = false
+                bouncyScrollToBottom()
             }
-            if !userScrolledUp { bouncyScrollToBottom() }
-        }
-        .onChange(of: lastMessageContent) { _, _ in
-            if !userScrolledUp { scrollToBottom() }
         }
         .onChange(of: session.suggestedActions.count) { _, _ in
+            // Suggestions appearing grows the doc — KVO will catch it, but use
+            // the smooth animation for this specific transition.
             if !userScrolledUp { smoothScrollToBottom() }
         }
-        .onChange(of: lastMessageBlockCount) { _, _ in
-            if !userScrolledUp { scrollToBottom() }
-        }
-        .onChange(of: session.assistantState) { _, _ in
-            if !userScrolledUp { scrollToBottom() }
-        }
         .onChange(of: session.messageQueue.count) { _, _ in
-            // Queue strip appearing/growing changes bottom inset — re-scroll after layout settles
+            // Queue strip changes bottom inset, not doc height — KVO won't fire.
             if !userScrolledUp {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     smoothScrollToBottom()
@@ -175,14 +160,14 @@ struct ChatView: View {
         }
         .onAppear {
             userScrolledUp = false
-            snapToBottom()
         }
         .onDisappear {
-            // Clean up notification observers
             for observer in scrollObservers {
                 NotificationCenter.default.removeObserver(observer)
             }
             scrollObservers = []
+            docFrameObservation?.invalidate()
+            docFrameObservation = nil
         }
         .overlay(alignment: .bottom) {
             if userScrolledUp && !session.chatMessages.isEmpty {
@@ -276,32 +261,48 @@ struct ChatView: View {
         .animation(.easeInOut(duration: 0.15), value: chatPreviewIndex)
     }
 
-    /// Subscribe to NSScrollView clip view bounds changes to detect user scrolls.
-    /// Uses isProgrammaticScroll flag to distinguish user vs code scrolls.
+    /// Subscribe to:
+    ///  • NSScrollView clip view bounds → detect user scrolls.
+    ///  • Document view frame → stay pinned to bottom while content lays out.
+    /// Uses `isProgrammaticScroll` to distinguish user vs code scrolls.
     private func observeUserScroll(_ scrollView: NSScrollView) {
         for observer in scrollObservers {
             NotificationCenter.default.removeObserver(observer)
         }
         scrollObservers = []
+        docFrameObservation?.invalidate()
 
-        // Enable bounds change notifications on the clip view
+        // User scroll detection.
         scrollView.contentView.postsBoundsChangedNotifications = true
-
         let boundsObserver = NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification,
             object: scrollView.contentView,
             queue: .main
         ) { [self] _ in
-            // Skip if this was triggered by our own scrollToBottom()
             guard !isProgrammaticScroll else { return }
-
-            if isScrollViewAtBottom(scrollView) {
-                userScrolledUp = false
-            } else {
-                userScrolledUp = true
-            }
+            userScrolledUp = !isScrollViewAtBottom(scrollView)
         }
         scrollObservers.append(boundsObserver)
+
+        // Stay pinned to bottom while the doc view grows: initial layout on
+        // session switch, async markdown rendering, streaming text, tool-use
+        // blocks, thinking pet, etc. The `isProgrammaticScroll` guard keeps
+        // this from racing with bouncy/smooth animations.
+        if let docView = scrollView.documentView {
+            docFrameObservation = docView.observe(\.frame, options: [.new, .old]) { _, change in
+                guard let new = change.newValue, let old = change.oldValue,
+                      new.height != old.height else { return }
+                DispatchQueue.main.async {
+                    guard !userScrolledUp, !isProgrammaticScroll else { return }
+                    scrollToBottom()
+                }
+            }
+        }
+
+        // Initial snap once observers are wired and the view is in hierarchy.
+        DispatchQueue.main.async {
+            scrollToBottom()
+        }
     }
 
     private func isScrollViewAtBottom(_ scrollView: NSScrollView) -> Bool {
@@ -311,19 +312,6 @@ struct ChatView: View {
         let offsetY = scrollView.contentView.bounds.origin.y
         let inputBarOffset: CGFloat = 56
         return offsetY + viewportHeight >= contentHeight - 80 + inputBarOffset
-    }
-
-    /// Scroll-to-bottom for fresh appearance / session switch.
-    /// Retries across the layout settle window since markdown/code blocks
-    /// resize asynchronously and a single early call usually misses.
-    private func snapToBottom() {
-        let delays: [Double] = [0.05, 0.15, 0.3, 0.6, 1.0]
-        for delay in delays {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                guard !userScrolledUp else { return }
-                scrollToBottom()
-            }
-        }
     }
 
     /// Scroll the underlying NSScrollView to the bottom.
