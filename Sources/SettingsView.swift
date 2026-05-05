@@ -255,9 +255,40 @@ struct GeneralSettingsTab: View {
                 Toggle("Auto-process queue when Claude is ready",
                        isOn: $settings.autoProcessQueue)
             }
+
+            Section("Diagnostics") {
+                CopyDebugLogButton()
+                Text("Copies recent in-app log lines to the clipboard. Paste them into the chat with Allu when reporting a UI bug.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()
+    }
+}
+
+private struct CopyDebugLogButton: View {
+    @State private var lastCopied: Int?
+
+    var body: some View {
+        HStack {
+            Button {
+                lastCopied = DebugLog.shared.copyToPasteboard()
+            } label: {
+                Label("Copy debug log", systemImage: "doc.on.clipboard")
+            }
+            Button("Clear") {
+                DebugLog.shared.clear()
+                lastCopied = nil
+            }
+            .buttonStyle(.borderless)
+            if let n = lastCopied {
+                Text("Copied \(n) chars")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

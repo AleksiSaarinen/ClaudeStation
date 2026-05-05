@@ -51,7 +51,7 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 12) {
                 // Capture reference to the parent NSScrollView
                 ScrollViewFinder { sv in
-                    NSLog("[ChatView] ScrollViewFinder resolved doc=\(sv.documentView?.bounds ?? .zero) clip=\(sv.contentView.bounds)")
+                    DebugLog.shared.log("[ChatView] ScrollViewFinder resolved doc=\(sv.documentView?.bounds ?? .zero) clip=\(sv.contentView.bounds)")
                     chatScrollView = sv
                     observeUserScroll(sv)
                 }
@@ -169,7 +169,7 @@ struct ChatView: View {
             }
         }
         .onAppear {
-            NSLog("[ChatView] onAppear session=\(session.name) msgs=\(session.chatMessages.count)")
+            DebugLog.shared.log("[ChatView] onAppear session=\(session.name) msgs=\(session.chatMessages.count)")
             userScrolledUp = false
             contentReady = false
             ignoreScrollChangesUntil = Date().addingTimeInterval(2.0)
@@ -177,7 +177,7 @@ struct ChatView: View {
             // layout), reveal anyway so the user isn't staring at a spinner.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 if !contentReady {
-                    NSLog("[ChatView] safety reveal (pollSnap never confirmed at-bottom) session=\(session.name)")
+                    DebugLog.shared.log("[ChatView] safety reveal (pollSnap never confirmed at-bottom) session=\(session.name)")
                     contentReady = true
                 }
             }
@@ -347,14 +347,14 @@ struct ChatView: View {
     }
 
     private func snapToBottomOnAppear() {
-        NSLog("[ChatView] snapToBottomOnAppear start session=\(session.name)")
+        DebugLog.shared.log("[ChatView] snapToBottomOnAppear start session=\(session.name)")
         pollSnap(iterationsLeft: 40)  // 40 * 50ms = 2s
     }
 
     private func pollSnap(iterationsLeft: Int) {
         if contentReady { return }
         guard iterationsLeft > 0 else {
-            NSLog("[ChatView] pollSnap exhausted without confirmed-at-bottom session=\(session.name)")
+            DebugLog.shared.log("[ChatView] pollSnap exhausted without confirmed-at-bottom session=\(session.name)")
             return
         }
         userScrolledUp = false
@@ -362,7 +362,7 @@ struct ChatView: View {
         // Check at-bottom on the next runloop tick (after scroll has applied).
         DispatchQueue.main.async {
             if !contentReady, isPositionedAtBottom() {
-                NSLog("[ChatView] reveal at-bottom session=\(session.name) iter=\(40 - iterationsLeft)")
+                DebugLog.shared.log("[ChatView] reveal at-bottom session=\(session.name) iter=\(40 - iterationsLeft)")
                 contentReady = true
                 return
             }
@@ -401,31 +401,31 @@ struct ChatView: View {
     private func scrollToBottom() {
         DispatchQueue.main.async {
             guard let scrollView = chatScrollView else {
-                NSLog("[ChatView] scrollToBottom bail: chatScrollView=nil")
+                DebugLog.shared.log("[ChatView] scrollToBottom bail: chatScrollView=nil")
                 return
             }
             guard let docView = scrollView.documentView else {
-                NSLog("[ChatView] scrollToBottom bail: documentView=nil")
+                DebugLog.shared.log("[ChatView] scrollToBottom bail: documentView=nil")
                 return
             }
             let visibleHeight = scrollView.contentView.bounds.height
             let docHeight = docView.bounds.height
             guard docHeight > visibleHeight else {
-                NSLog("[ChatView] scrollToBottom bail: doc=\(docHeight) <= visible=\(visibleHeight)")
+                DebugLog.shared.log("[ChatView] scrollToBottom bail: doc=\(docHeight) <= visible=\(visibleHeight)")
                 return
             }
             // Add offset for the input bar safeAreaInset which overlaps the scroll view
             let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             let currentY = scrollView.contentView.bounds.origin.y
             guard currentY < target.y - 1 else {
-                NSLog("[ChatView] scrollToBottom skip: already at curY=\(currentY) target=\(target.y)")
+                DebugLog.shared.log("[ChatView] scrollToBottom skip: already at curY=\(currentY) target=\(target.y)")
                 return
             }
             beginProgrammaticScrollWindow()
             scrollView.contentView.setBoundsOrigin(target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
             let resultY = scrollView.contentView.bounds.origin.y
-            NSLog("[ChatView] scrollToBottom set target=\(target.y) result=\(resultY) doc=\(docHeight) vis=\(visibleHeight) inset=\(bottomInsetOffset)")
+            DebugLog.shared.log("[ChatView] scrollToBottom set target=\(target.y) result=\(resultY) doc=\(docHeight) vis=\(visibleHeight) inset=\(bottomInsetOffset)")
         }
     }
 
