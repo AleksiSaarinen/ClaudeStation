@@ -4,12 +4,13 @@ struct ChatView: View {
     @ObservedObject var session: Session
     var onSuggestionTap: ((String) -> Void)? = nil
     @Environment(\.theme) var theme
-    @State private var lastScrollTime: Date = .distantPast
     @State private var chatScrollView: NSScrollView?
     @State private var userScrolledUp = false
     @State private var scrollObservers: [NSObjectProtocol] = []
     @State private var docFrameObservation: NSKeyValueObservation?
     @State private var isProgrammaticScroll = false
+    @State private var isAnimatingScroll = false
+    @State private var programmaticScrollEpoch: Int = 0
     @State private var chatPreviewImages: [String] = []
     @State private var chatPreviewIndex: Int? = nil
     @State private var visibleMessageCount: Int = 20
@@ -286,14 +287,17 @@ struct ChatView: View {
 
         // Stay pinned to bottom while the doc view grows: initial layout on
         // session switch, async markdown rendering, streaming text, tool-use
-        // blocks, thinking pet, etc. The `isProgrammaticScroll` guard keeps
-        // this from racing with bouncy/smooth animations.
+        // blocks, thinking pet, etc. Gated only on `isAnimatingScroll` so a
+        // bouncy/smooth animation isn't yanked mid-flight; the plain
+        // programmatic-scroll settle window does NOT block this — otherwise
+        // tool-call streams that grow the doc inside that window get stranded
+        // above the bottom.
         if let docView = scrollView.documentView {
             docFrameObservation = docView.observe(\.frame, options: [.new, .old]) { _, change in
                 guard let new = change.newValue, let old = change.oldValue,
                       new.height != old.height else { return }
                 DispatchQueue.main.async {
-                    guard !userScrolledUp, !isProgrammaticScroll else { return }
+                    guard !userScrolledUp, !isAnimatingScroll else { return }
                     scrollToBottom()
                 }
             }
@@ -315,11 +319,9 @@ struct ChatView: View {
     }
 
     /// Scroll the underlying NSScrollView to the bottom.
+    /// Idempotent: bails when already at the bottom, so it's safe to call as
+    /// often as the doc-view KVO fires during streaming growth.
     private func scrollToBottom() {
-        let now = Date()
-        guard now.timeIntervalSince(lastScrollTime) > 0.05 else { return }
-        lastScrollTime = now
-
         DispatchQueue.main.async {
             guard let scrollView = chatScrollView,
                   let docView = scrollView.documentView else { return }
@@ -330,10 +332,22 @@ struct ChatView: View {
             let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             let currentY = scrollView.contentView.bounds.origin.y
             guard currentY < target.y - 1 else { return }
-            isProgrammaticScroll = true
+            beginProgrammaticScrollWindow()
             scrollView.contentView.setBoundsOrigin(target)
             scrollView.reflectScrolledClipView(scrollView.contentView)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        }
+    }
+
+    /// Mute the user-scroll detector for ~150ms so the bounds-changed
+    /// notification from our own setBoundsOrigin isn't misread as a user
+    /// scroll. Uses an epoch so back-to-back programmatic scrolls don't end
+    /// the window early.
+    private func beginProgrammaticScrollWindow() {
+        isProgrammaticScroll = true
+        programmaticScrollEpoch += 1
+        let myEpoch = programmaticScrollEpoch
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if programmaticScrollEpoch == myEpoch {
                 isProgrammaticScroll = false
             }
         }
@@ -348,6 +362,7 @@ struct ChatView: View {
             guard docHeight > visibleHeight else { return }
             let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             isProgrammaticScroll = true
+            isAnimatingScroll = true
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.4
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -355,6 +370,7 @@ struct ChatView: View {
                 scrollView.reflectScrolledClipView(scrollView.contentView)
             }, completionHandler: {
                 isProgrammaticScroll = false
+                isAnimatingScroll = false
             })
         }
     }
@@ -369,6 +385,7 @@ struct ChatView: View {
             let target = NSPoint(x: 0, y: docHeight - visibleHeight + bottomInsetOffset)
             let overshoot = NSPoint(x: 0, y: target.y + 35)
             isProgrammaticScroll = true
+            isAnimatingScroll = true
 
             // Phase 1: Quick scroll past the bottom
             NSAnimationContext.runAnimationGroup({ ctx in
@@ -385,6 +402,7 @@ struct ChatView: View {
                     scrollView.reflectScrolledClipView(scrollView.contentView)
                 }, completionHandler: {
                     isProgrammaticScroll = false
+                    isAnimatingScroll = false
                 })
             })
         }
