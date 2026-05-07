@@ -45,6 +45,10 @@ class SessionManager: ObservableObject {
             if session.contextSummary.isEmpty && session.chatMessages.count >= 2 && AppSettings.shared.managedContext {
                 TerminalService.shared.bootstrapContextSummary(for: session)
             }
+            // Bootstrap the recap line for sessions saved before this feature shipped
+            if session.recapText.isEmpty && session.chatMessages.contains(where: { $0.role == .assistant }) {
+                TerminalService.shared.bootstrapRecap(for: session)
+            }
         }
 
         // Listen for save triggers from TerminalService

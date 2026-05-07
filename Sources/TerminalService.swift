@@ -13,6 +13,10 @@ class TerminalService {
     private var activeSummaryProcesses: [UUID: Process] = [:]
     /// Debounce timers for context summary updates
     private var summaryDebounceTimers: [UUID: DispatchWorkItem] = [:]
+    /// Track active recap processes per session so we can cancel stale ones
+    private var activeRecapProcesses: [UUID: Process] = [:]
+    /// Debounce timers for recap updates
+    private var recapDebounceTimers: [UUID: DispatchWorkItem] = [:]
 
     /// Resolved full path to the claude binary (cached after first lookup)
     private lazy var resolvedClaudePath: String = {
@@ -61,6 +65,12 @@ class TerminalService {
                 let sysMsg = ChatMessage(role: .system, content: "Context cleared — next message starts a fresh session.")
                 session.chatMessages.append(sysMsg)
                 session.suggestedActions = []
+                session.recapText = ""
+                // Slash commands return without spawning claude, so the runAndCollect tail
+                // that normally drains the queue never fires. Drain it ourselves.
+                if !session.messageQueue.isEmpty {
+                    self.processNextInQueue(for: session)
+                }
             }
             return
         }
@@ -71,6 +81,9 @@ class TerminalService {
                     session.effortLevel = String(parts[1])
                     let sysMsg = ChatMessage(role: .system, content: "Effort set to \(parts[1]).")
                     session.chatMessages.append(sysMsg)
+                    if !session.messageQueue.isEmpty {
+                        self.processNextInQueue(for: session)
+                    }
                 }
                 return
             }
@@ -149,6 +162,7 @@ class TerminalService {
             session.status = .running
             session.assistantState = .thinking(Self.randomSpinnerVerb())
             session.suggestedActions = []
+            session.rateLimitHit = false
         }
 
         let startTime = Date()
@@ -162,7 +176,7 @@ class TerminalService {
             args += ["--permission-mode", "plan"]
             // In headless -p mode there's no permission prompter, so research
             // tools get auto-denied. Allow read-only research tools explicitly.
-            args += ["--allowedTools", "WebSearch", "WebFetch"]
+            args += ["--allowedTools", "WebSearch,WebFetch"]
         } else if settings.alwaysBypassPermissions {
             args.append("--dangerously-skip-permissions")
         }
@@ -535,6 +549,21 @@ class TerminalService {
         let stderrData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
+        // Detect rate-limit hit. Two signals:
+        //  1. Primary: the usage % shown in the toolbar (scraped from claude.ai) is at the cap.
+        //  2. Fallback: stderr / last assistant text contains a known limit phrase (works
+        //     even when Chrome isn't open and the UsageMonitor can't read the page).
+        let monitor = UsageMonitor.shared
+        let usageAtCap = monitor.isLoggedIn
+            && (monitor.sessionUtilization >= 0.99 || monitor.weeklyUtilization >= 0.99)
+        let phraseMatch: Bool = {
+            let haystack = (stderrText + " " + (session.chatMessages.last?.content ?? "")).lowercased()
+            let phrases = ["usage limit reached", "claude ai usage limit", "rate limit", "rate_limit",
+                           "5-hour limit", "five-hour limit", "weekly limit", "usage_limit"]
+            return phrases.contains { haystack.contains($0) }
+        }()
+        let rateLimitHit = usageAtCap || phraseMatch
+
         // Finalize
         let duration = Date().timeIntervalSince(startTime)
         DispatchQueue.main.async {
@@ -557,6 +586,10 @@ class TerminalService {
                 session.chatMessages.append(err)
             }
 
+            session.rateLimitHit = rateLimitHit
+            // Refresh the usage % in the toolbar so the next message's check is fresh.
+            UsageMonitor.shared.refresh()
+
             session.status = .waitingForInput
             session.assistantState = .idle
             if session.planMode { session.planResponseReceived = true }
@@ -565,6 +598,9 @@ class TerminalService {
             if AppSettings.shared.managedContext {
                 self.updateContextSummary(for: session)
             }
+
+            // Refresh the prose recap (Haiku) so it reflects the just-finished turn
+            self.updateRecap(for: session)
 
             // Generate smart suggestions for next action (context suggestions appended inside)
             self.generateSuggestions(for: session)
@@ -590,7 +626,8 @@ class TerminalService {
                 }
             }
 
-            if !session.messageQueue.isEmpty {
+            // Don't burn through the queue if we just hit a rate limit — wait for user to tap Continue.
+            if !session.messageQueue.isEmpty && !rateLimitHit {
                 self.processNextInQueue(for: session)
             }
         }
@@ -807,6 +844,122 @@ class TerminalService {
                 }
             } catch {
                 DispatchQueue.main.async { self?.activeSummaryProcesses.removeValue(forKey: sessionId) }
+            }
+        }
+    }
+
+    /// Bootstrap a recap immediately (no debounce) for sessions restored from disk
+    /// that don't yet have one — e.g. saved before this feature shipped.
+    func bootstrapRecap(for session: Session) {
+        runRecapUpdate(for: session)
+    }
+
+    /// Update the dim "✶ recap:" line shown above the input bar. Debounced.
+    /// Spans every message since the most recent `/clear` system marker.
+    private func updateRecap(for session: Session) {
+        let sessionId = session.id
+        recapDebounceTimers[sessionId]?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.runRecapUpdate(for: session)
+        }
+        recapDebounceTimers[sessionId] = work
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5, execute: work)
+    }
+
+    private func runRecapUpdate(for session: Session) {
+        let messages = session.chatMessages
+
+        // Find start of current logical session (after last /clear marker).
+        var startIdx = 0
+        for i in stride(from: messages.count - 1, through: 0, by: -1) {
+            let m = messages[i]
+            if m.role == .system && m.content.hasPrefix("Context cleared") {
+                startIdx = i + 1
+                break
+            }
+        }
+        let scope = Array(messages[startIdx...])
+        guard scope.contains(where: { $0.role == .assistant }) else { return }
+
+        // Build a condensed transcript of the logical session (cap to last 16 msgs to keep prompt small).
+        var lines: [String] = []
+        for msg in scope.suffix(16) {
+            if msg.role == .user {
+                lines.append("User: \(String(msg.content.prefix(300)))")
+            } else if msg.role == .assistant {
+                var toolBits: [String] = []
+                for block in msg.blocks {
+                    guard case .toolUse(let name, let inputJson) = block.kind else { continue }
+                    if let data = inputJson.data(using: .utf8),
+                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        switch name {
+                        case "Bash":
+                            toolBits.append("Ran: \(String((dict["command"] as? String ?? "").prefix(80)))")
+                        case "Edit", "MultiEdit":
+                            toolBits.append("Edited \(((dict["file_path"] as? String ?? "") as NSString).lastPathComponent)")
+                        case "Write":
+                            toolBits.append("Wrote \(((dict["file_path"] as? String ?? "") as NSString).lastPathComponent)")
+                        case "Read":
+                            toolBits.append("Read \(((dict["file_path"] as? String ?? "") as NSString).lastPathComponent)")
+                        case "Grep", "Glob":
+                            toolBits.append("Searched \(dict["pattern"] as? String ?? "")")
+                        default:
+                            toolBits.append(name)
+                        }
+                    }
+                }
+                let tools = toolBits.isEmpty ? "" : " [\(toolBits.prefix(8).joined(separator: "; "))]"
+                lines.append("Assistant: \(String(msg.content.prefix(500)))\(tools)")
+            }
+        }
+
+        let prompt = """
+        You are writing a one-line "recap" shown beneath a coding-assistant chat. \
+        Summarize what's happened in this session so far in 1–2 short sentences (under 35 words). \
+        Use plain prose, present-perfect or past tense, no bullet lists, no markdown. \
+        Mention the concrete subject (feature, fix, refactor) — not generic phrases like "made changes".
+
+        Transcript:
+        \(lines.joined(separator: "\n"))
+
+        Return ONLY the recap sentence, nothing else.
+        """
+
+        let sessionId = session.id
+        if let existing = activeRecapProcesses[sessionId], existing.isRunning {
+            existing.terminate()
+        }
+
+        let claudePath = resolvedClaudePath
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            let escaped = prompt.replacingOccurrences(of: "'", with: "'\\''")
+            process.arguments = ["-l", "-c", "\(claudePath) -p --model haiku --output-format text '\(escaped)'"]
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            process.environment = ProcessInfo.processInfo.environment
+
+            self?.activeRecapProcesses[sessionId] = process
+            do {
+                try process.run()
+                process.waitUntilExit()
+                DispatchQueue.main.async { self?.activeRecapProcesses.removeValue(forKey: sessionId) }
+                guard process.terminationReason == .exit, process.terminationStatus == 0 else { return }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard var text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty else { return }
+                // Strip surrounding quotes Claude sometimes adds.
+                if (text.hasPrefix("\"") && text.hasSuffix("\"")) || (text.hasPrefix("'") && text.hasSuffix("'")) {
+                    text = String(text.dropFirst().dropLast())
+                }
+                DispatchQueue.main.async {
+                    session.recapText = text
+                    NotificationCenter.default.post(name: .init("ClaudeStationSave"), object: nil)
+                }
+            } catch {
+                DispatchQueue.main.async { self?.activeRecapProcesses.removeValue(forKey: sessionId) }
             }
         }
     }

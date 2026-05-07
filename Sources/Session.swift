@@ -51,6 +51,8 @@ class Session: ObservableObject, Identifiable {
     @Published var lastContextSize: Int = 0  // input + cache tokens from last message = current context window usage
     @Published var rateLimitResetsAt: Date?
     @Published var rateLimitType: String?  // "five_hour", "weekly", etc.
+    @Published var rateLimitHit: Bool = false  // true when last message failed due to usage limit
+    @Published var recapText: String = ""  // Haiku-generated 1-2 sentence recap of work since last /clear
     @Published var celebrating: Bool = false
     var celebrationStart: Date = .distantPast
 
