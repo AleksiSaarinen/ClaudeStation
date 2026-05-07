@@ -3,6 +3,9 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var session: Session
     var onSuggestionTap: ((String) -> Void)? = nil
+    /// Measured height of the safeAreaInset content (input bar + optional queue strip).
+    /// Drives scroll-to-bottom math so the chat reflows when the input bar expands.
+    var bottomInsetHeight: CGFloat = 56
     @Environment(\.theme) var theme
     @State private var lastScrollTime: Date = .distantPast
     @State private var chatScrollView: NSScrollView?
@@ -13,14 +16,7 @@ struct ChatView: View {
     @State private var chatPreviewIndex: Int? = nil
     @State private var visibleMessageCount: Int = 20
 
-    /// Dynamic bottom offset accounting for input bar + queue strip
-    private var bottomInsetOffset: CGFloat {
-        let inputBar: CGFloat = 56
-        if session.messageQueue.isEmpty { return inputBar }
-        // Queue header (~30) + per-pill (~34) + padding (~16)
-        let queueHeight: CGFloat = 30 + CGFloat(min(session.messageQueue.count, 3)) * 34 + 16
-        return inputBar + queueHeight
-    }
+    private var bottomInsetOffset: CGFloat { bottomInsetHeight }
 
     /// Track content length of last message to detect streaming updates
     private var lastMessageContent: Int {
@@ -118,13 +114,21 @@ struct ChatView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.3, anchor: .leading)))
                 }
 
-                // Suggested actions after Claude finishes
-                if session.status == .waitingForInput
+                // Rate-limit banner — replaces suggestions when last message hit a usage limit.
+                if session.rateLimitHit {
+                    RateLimitContinueBanner(session: session)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else if session.status == .waitingForInput
                     && session.chatMessages.last?.role == .assistant
                     && !session.planMode {
-                    SuggestedActions(session: session, onTap: { text in
-                        onSuggestionTap?(text)
-                    })
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !session.recapText.isEmpty {
+                            RecapLine(text: session.recapText)
+                        }
+                        SuggestedActions(session: session, onTap: { text in
+                            onSuggestionTap?(text)
+                        })
+                    }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
@@ -167,12 +171,13 @@ struct ChatView: View {
         .onChange(of: session.assistantState) { _, _ in
             if !userScrolledUp { scrollToBottom() }
         }
-        .onChange(of: session.messageQueue.count) { _, _ in
-            // Queue strip appearing/growing changes bottom inset — re-scroll after layout settles
-            if !userScrolledUp {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    smoothScrollToBottom()
-                }
+        .onChange(of: bottomInsetHeight) { old, new in
+            // Bottom inset grew (input bar expanded or queue strip appeared/grew) — re-scroll
+            // so the conversation stays glued to the top of the bar instead of being hidden.
+            // Only react to growth, and only if the user hasn't scrolled away.
+            guard new > old, !userScrolledUp else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                smoothScrollToBottom()
             }
         }
         .onAppear {
@@ -1779,5 +1784,119 @@ struct SuggestedActions: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Recap Line
+
+struct RecapLine: View {
+    let text: String
+    @Environment(\.theme) var theme
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("✶")
+                .font(.system(size: 11))
+                .foregroundStyle(theme.accent.opacity(0.85))
+            (
+                Text("recap: ")
+                    .font(.system(size: 11, weight: .semibold))
+                    .italic()
+                +
+                Text(text)
+                    .font(.system(size: 11))
+                    .italic()
+            )
+            .foregroundStyle(theme.chromeText)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - Rate Limit Continue Banner
+
+struct RateLimitContinueBanner: View {
+    @ObservedObject var session: Session
+    @ObservedObject var usageMonitor: UsageMonitor = .shared
+    @Environment(\.theme) var theme
+
+    private func resetCountdown(now: Date) -> String? {
+        guard let resetsAt = session.rateLimitResetsAt else { return nil }
+        let remaining = resetsAt.timeIntervalSince(now)
+        if remaining <= 0 { return "now" }
+        let total = Int(remaining)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 { return "\(h)h \(m)m" }
+        if m > 0 { return "\(m)m \(s)s" }
+        return "\(s)s"
+    }
+
+    /// Pick a label to show next to "Resets". Prefer the live countdown from the
+    /// CLI's rate_limit_event; fall back to the toolbar usage monitor's text.
+    private var resetLabel: String? {
+        if usageMonitor.weeklyUtilization >= 0.99, !usageMonitor.weeklyResetText.isEmpty {
+            return usageMonitor.weeklyResetText
+        }
+        if !usageMonitor.sessionResetText.isEmpty {
+            return usageMonitor.sessionResetText
+        }
+        return nil
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hourglass")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(theme.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Hit usage limit")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.chromeText)
+                if session.rateLimitResetsAt != nil {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let label = resetCountdown(now: context.date) ?? ""
+                        Text(label == "now" ? "Resets now — tap Continue" : "Resets in \(label)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(theme.mutedText)
+                    }
+                } else if let label = resetLabel {
+                    Text("Resets in \(label)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.mutedText)
+                } else {
+                    Text("Tap Continue once limits reset")
+                        .font(.system(size: 10))
+                        .foregroundStyle(theme.mutedText)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                TerminalService.shared.send(text: "continue", to: session, force: true)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Continue")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(theme.chromeText)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+                .modifier(LiquidGlassChrome(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .cursor(.pointingHand)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .modifier(LiquidGlassChrome(cornerRadius: 14))
     }
 }

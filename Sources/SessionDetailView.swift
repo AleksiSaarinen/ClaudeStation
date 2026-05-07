@@ -17,6 +17,7 @@ struct SessionDetailView: View {
     @StateObject private var pasteboardWatcher = PasteboardWatcher()
     @FocusState private var inputFocused: Bool
     @State private var taskStartTime: Date?
+    @State private var bottomInsetHeight: CGFloat = 56
     @ObservedObject private var updateChecker = UpdateChecker.shared
     
     var body: some View {
@@ -26,7 +27,7 @@ struct SessionDetailView: View {
             } else {
             ChatView(session: session, onSuggestionTap: { text in
                     inputText = text
-                })
+                }, bottomInsetHeight: bottomInsetHeight)
                 .contentShape(Rectangle())
                 .onTapGesture { inputFocused = true }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -95,6 +96,14 @@ struct SessionDetailView: View {
                     }
                     .animation(.easeInOut(duration: 0.25), value: session.messageQueue.count)
                     .animation(.easeInOut(duration: 0.2), value: pasteboardWatcher.pendingImage != nil)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: BottomInsetHeightKey.self, value: proxy.size.height)
+                        }
+                    )
+                    .onPreferenceChange(BottomInsetHeightKey.self) { newHeight in
+                        if newHeight > 0 { bottomInsetHeight = newHeight }
+                    }
                 }
             .overlay {
                 if isDragOver {
@@ -826,5 +835,12 @@ extension View {
         self.onHover { inside in
             if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+    }
+}
+
+private struct BottomInsetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
