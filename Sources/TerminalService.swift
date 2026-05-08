@@ -256,6 +256,7 @@ class TerminalService {
         var resultCost: Double?
         var resultInputTokens: Int?
         var resultOutputTokens: Int?
+        var haltedForAskUserQuestion = false
 
         // Read stdout line by line — stream blocks into live message
         while true {
@@ -316,6 +317,18 @@ class TerminalService {
                                         var msg = ChatMessage(role: .assistant, content: "", blocks: [toolBlock])
                                         msg.durationSeconds = 0
                                         session.chatMessages.append(msg)
+                                    }
+                                }
+
+                                // In -p mode the CLI auto-defaults the AskUserQuestion tool
+                                // result, so the model would race ahead with assumed answers
+                                // before the user can click. Halt the turn here; the card's
+                                // submit() spawns a fresh --resume turn with the real answer.
+                                if name == "AskUserQuestion", !haltedForAskUserQuestion {
+                                    let questions = input["questions"] as? [[String: Any]] ?? []
+                                    if !questions.isEmpty {
+                                        haltedForAskUserQuestion = true
+                                        process.terminate()
                                     }
                                 }
                                 let label: String = {
