@@ -347,36 +347,52 @@ struct UsageToolbarView: View {
     @ObservedObject var usageMonitor: UsageMonitor = .shared
     @Environment(\.theme) var theme
 
-    private var isStale: Bool {
-        guard let last = usageMonitor.lastUpdated else { return true }
+    private func isStale(_ usage: PlanUsage?) -> Bool {
+        guard let last = usage?.lastUpdated else { return true }
         return Date().timeIntervalSince(last) > 300
     }
 
     var body: some View {
-        if usageMonitor.isLoggedIn {
-            HStack(spacing: 2) {
-                UsagePill(
-                    label: usageMonitor.sessionResetText.isEmpty ? "" : usageMonitor.sessionResetText,
-                    utilization: usageMonitor.sessionUtilization,
-                    resetText: usageMonitor.sessionResetText,
-                    theme: theme
-                )
-                if isStale {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.orange)
+        let team = usageMonitor.teamUsage
+        let maxPlan = usageMonitor.maxUsage
+        let hasAny = team != nil || maxPlan != nil
+
+        if hasAny {
+            VStack(alignment: .leading, spacing: 1) {
+                if let t = team {
+                    PlanUsageRow(
+                        plan: .team,
+                        usage: t,
+                        isCurrent: usageMonitor.currentPlan == .team,
+                        isStale: isStale(t),
+                        theme: theme
+                    )
+                }
+                if let m = maxPlan {
+                    PlanUsageRow(
+                        plan: .max,
+                        usage: m,
+                        isCurrent: usageMonitor.currentPlan == .max,
+                        isStale: isStale(m),
+                        theme: theme
+                    )
                 }
             }
-            .opacity(isStale ? 0.5 : 1.0)
             .padding(.leading, 8)
             .onTapGesture {
-                if isStale {
-                    usageMonitor.openUsageInBrowser()
-                } else {
-                    usageMonitor.refresh()
-                }
+                usageMonitor.refresh()
             }
-            .help(isStale ? "Stale — click to reopen Chrome tab" : "Click to refresh — Resets in \(usageMonitor.sessionResetText)")
+            .help("Click to refresh — switch Chrome account to update the other plan")
+        } else if usageMonitor.isLoggedIn {
+            // Logged in but plan not yet detected — show the legacy single pill as a fallback
+            UsagePill(
+                label: usageMonitor.sessionResetText,
+                utilization: usageMonitor.sessionUtilization,
+                resetText: usageMonitor.sessionResetText,
+                theme: theme
+            )
+            .padding(.leading, 8)
+            .onTapGesture { usageMonitor.refresh() }
         } else {
             Button {
                 usageMonitor.openUsageInBrowser()
@@ -385,6 +401,84 @@ struct UsageToolbarView: View {
             }
             .help("Opens claude.ai usage in Chrome")
         }
+    }
+}
+
+// MARK: - Per-Plan Usage Row
+
+struct PlanUsageRow: View {
+    let plan: PlanType
+    let usage: PlanUsage
+    let isCurrent: Bool
+    let isStale: Bool
+    let theme: Theme
+
+    private var barColor: Color {
+        if usage.session > 0.8 { return .red }
+        if usage.session > 0.6 { return .orange }
+        return theme.accent
+    }
+
+    private var pct: Int { Int(usage.session * 100) }
+
+    private var shortReset: String {
+        usage.sessionReset
+            .replacingOccurrences(of: " minutes", with: "m")
+            .replacingOccurrences(of: " minute", with: "m")
+            .replacingOccurrences(of: " min", with: "m")
+            .replacingOccurrences(of: " hours", with: "h")
+            .replacingOccurrences(of: " hour", with: "h")
+            .replacingOccurrences(of: " hr", with: "h")
+            .replacingOccurrences(of: " days", with: "d")
+            .replacingOccurrences(of: " day", with: "d")
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(plan.shortLabel)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(theme.mutedText)
+                .frame(width: 10, alignment: .leading)
+
+            Text("\(pct)%")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(usage.session > 0.8 ? .red : theme.chromeText)
+                .frame(width: 28, alignment: .trailing)
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(theme.mutedText.opacity(0.2))
+                    .frame(width: 32, height: 4)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(barColor)
+                    .frame(width: max(1, 32 * usage.session), height: 4)
+            }
+
+            if !shortReset.isEmpty {
+                Text(shortReset)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(theme.mutedText)
+                    .lineLimit(1)
+                    .frame(minWidth: 24, alignment: .leading)
+            }
+
+            if isStale {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .opacity(isCurrent ? 1.0 : 0.45)
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        var parts: [String] = ["\(plan.displayName) plan — \(pct)% session"]
+        if !usage.sessionReset.isEmpty { parts.append("resets in \(usage.sessionReset)") }
+        if !usage.weeklyReset.isEmpty { parts.append("weekly resets \(usage.weeklyReset)") }
+        if isStale { parts.append("(stale snapshot)") }
+        if !isCurrent { parts.append("(not currently logged in)") }
+        return parts.joined(separator: " · ")
     }
 }
 
