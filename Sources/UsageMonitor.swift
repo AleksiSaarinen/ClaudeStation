@@ -88,7 +88,7 @@ class UsageMonitor: NSObject, ObservableObject {
     }
 
     func openUsageInBrowser() {
-        if let url = URL(string: "https://claude.ai/settings/usage") {
+        if let url = URL(string: "https://claude.ai/new#settings/usage") {
             NSWorkspace.shared.open(url)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
@@ -125,7 +125,7 @@ class UsageMonitor: NSObject, ObservableObject {
             tell application "Google Chrome"
                 repeat with w in windows
                     repeat with t in tabs of w
-                        if URL of t contains "claude.ai/settings" then
+                        if URL of t contains "settings/usage" then
                             tell t to reload
                             exit repeat
                         end if
@@ -145,7 +145,7 @@ class UsageMonitor: NSObject, ObservableObject {
                 set resultText to ""
                 repeat with w in windows
                     repeat with t in tabs of w
-                        if URL of t contains "claude.ai/settings" then
+                        if URL of t contains "settings/usage" then
                             set resultText to execute t javascript "(function(){ var result = {loggedIn:false,plan:'unknown',planName:'',session:0,weekly:0,sonnet:0,sessionReset:'',weeklyReset:''}; var allText = document.body ? document.body.innerText : ''; if (!allText.includes('% used')) return JSON.stringify(result); result.loggedIn = true; var pm = allText.match(/Your usage limits\\\\s+(Team|Max\\\\s*\\\\d*x?|Pro|Enterprise)/i); if (pm) { result.planName = pm[1].trim(); var p = pm[1].toLowerCase(); if (p.indexOf('team') !== -1 || p.indexOf('enterprise') !== -1) { result.plan = 'team'; } else if (p.indexOf('max') !== -1) { result.plan = 'max'; } } var sm = allText.match(/Current session[\\\\s\\\\S]*?(\\\\d+)%\\\\s*used/); if (sm) result.session = parseInt(sm[1]); var rm = allText.match(/Resets in ([^\\\\n]+)/); if (rm) result.sessionReset = rm[1].trim(); var wm = allText.match(/All models[\\\\s\\\\S]*?(\\\\d+)%\\\\s*used/); if (wm) result.weekly = parseInt(wm[1]); var wr = allText.match(/Resets (\\\\w+ \\\\d+:\\\\d+ [AP]M)/); if (wr) result.weeklyReset = wr[1].trim(); var sn = allText.match(/Sonnet only[\\\\s\\\\S]*?(\\\\d+)%\\\\s*used/); if (sn) result.sonnet = parseInt(sn[1]); return JSON.stringify(result); })()"
                             exit repeat
                         end if
